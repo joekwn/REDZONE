@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REDZONE · Global Active Fire Monitor</title>
+<link rel="icon" type="image/png" href="/static/img/favicon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #e6e8ec; --muted: #8b93a3;
+    --accent: #ff4d2e; --modis: #38bdf8; --viirs: #fb923c; --ok: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+               font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: var(--side-w, 340px) 6px 1fr; height: 100%; }
+  #resizer { background: var(--line); cursor: col-resize; position: relative; touch-action: none; outline: none; }
+  #resizer::after { content: ""; position: absolute; top: 50%; left: 1px; width: 4px; height: 36px; margin-top: -18px;
+                    border-radius: 2px; background: #3a4150; }
+  #resizer:hover, #resizer.dragging, #resizer:focus-visible { background: var(--accent); }
+  body.resizing { cursor: col-resize; user-select: none; }
+  body.resizing #map { pointer-events: none; }
+  .brandrow { display: flex; align-items: center; gap: 10px; }
+  .brandrow img { width: 42px; height: 42px; flex: none; }
+  .brandrow .home { margin-left: auto; font-size: 12px; color: var(--muted); text-decoration: none; white-space: nowrap;
+                    max-width: 110px; overflow: hidden; text-overflow: ellipsis;
+                    border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+  .brandrow .home:hover { color: var(--text); border-color: var(--muted); }
+  .proto { font-size: 11px; color: #facc15; border: 1px solid rgba(250,204,21,.35); border-radius: 6px;
+           padding: 5px 8px; margin: 8px 0 10px; background: rgba(250,204,21,.06); }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  .side-head { flex: none; padding: 14px 16px 4px; }
+  .side-head .proto { margin: 8px 0 4px; }
+  .tabs { flex: none; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 8px 14px 10px;
+          border-bottom: 1px solid var(--line); scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: #3a4150 transparent;
+          -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+                  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+  .tabs::-webkit-scrollbar { height: 5px; }
+  .tabs::-webkit-scrollbar-thumb { background: #3a4150; border-radius: 3px; }
+  .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 12px;
+         background: #1d212a; border: 1px solid var(--line); font-size: 12.5px; white-space: nowrap; color: var(--text); }
+  .tab:hover { border-color: var(--muted); }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .tab .ti { font-size: 13px; }
+  .tab .tb { background: var(--accent); color: #fff; border-radius: 999px; font-size: 10.5px; font-weight: 700; padding: 0 6px; }
+  .tab.active .tb { background: #fff; color: var(--accent); }
+  .tab .tb:empty { display: none; }
+  .side-body { flex: 1; overflow-y: auto; padding: 0 18px 30px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .panel > h2:first-child, .panel > div:first-child > h2:first-child { border-top: 0; margin-top: 14px; padding-top: 0; }
+  #map { height: 100%; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .08em; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 12px; margin: 2px 0 14px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted);
+       margin: 20px 0 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+  label { display: flex; align-items: center; gap: 8px; margin: 4px 0; cursor: pointer; }
+  input[type=date], input[type=text], select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 8px; font: inherit; width: 100%; color-scheme: dark; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .presets { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  button { background: #222733; color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+           padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .card .k { color: var(--muted); font-size: 11px; }
+  .card .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .card .s { color: var(--muted); font-size: 11px; }
+  .note { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+  .site { background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+          border-radius: 6px; padding: 8px 10px; margin: 6px 0; font-size: 12.5px; }
+  .site b { font-size: 13.5px; }
+  .site .x { float: right; padding: 0 6px; }
+  .alert { color: var(--accent); font-weight: 600; }
+  .safe { color: var(--ok); }
+  #status { position: absolute; bottom: 22px; left: 12px; z-index: 1000;
+            background: rgba(15,17,21,.88); border: 1px solid var(--line); border-radius: 20px;
+            padding: 5px 14px; font-size: 12px; color: var(--muted); pointer-events: none; }
+  #legend { position: absolute; bottom: 22px; right: 12px; z-index: 1000; background: rgba(15,17,21,.9);
+            border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; }
+  #legend .bar { height: 8px; width: 160px; border-radius: 4px; margin: 4px 0 2px;
+                 background: linear-gradient(90deg, #fde68a, #fb923c, #ef4444, #7f1d1d); }
+  .mapwrap { position: relative; }
+  .leaflet-container { background: #0b0d10; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
+  .leaflet-popup-content { font-size: 12.5px; }
+  .pop td:first-child { color: var(--muted); padding-right: 10px; }
+  #about { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 2000;
+           align-items: center; justify-content: center; }
+  #about .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+                max-width: 640px; max-height: 85vh; overflow-y: auto; padding: 22px 26px; }
+  #about h3 { margin: 16px 0 6px; font-size: 14px; }
+  #about li { margin: 3px 0; color: #c9ced8; }
+  .tag { font-size: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; color: var(--muted); }
+  body.picking #map { cursor: crosshair; }
+  #search { position: absolute; top: 10px; left: 56px; z-index: 1001; width: 360px; max-width: calc(100% - 120px); }
+  #search .box { display: flex; align-items: center; background: #fff; border-radius: 24px;
+                 box-shadow: 0 2px 6px rgba(0,0,0,.35); padding: 0 6px 0 14px; height: 44px; }
+  #search input { flex: 1; border: 0; outline: 0; font: 15px system-ui, sans-serif; color: #202124; background: transparent; }
+  #search .ico { color: #5f6368; font-size: 18px; margin-right: 8px; }
+  #search .clear { border: 0; background: transparent; color: #5f6368; font-size: 20px; padding: 4px 8px; display: none; }
+  #search .clear:hover { border: 0; color: #202124; }
+  #qres { background: #fff; border-radius: 0 0 14px 14px; box-shadow: 0 6px 12px rgba(0,0,0,.35);
+          margin: -4px 8px 0; overflow: hidden; display: none; }
+  #qres .opt { padding: 9px 14px; cursor: pointer; color: #202124; border-top: 1px solid #eee; font-size: 13.5px; }
+  #qres .opt:hover, #qres .opt.sel { background: #f1f3f4; }
+  #qres .opt small { display: block; color: #70757a; font-size: 12px; }
+  #qres .msg { padding: 10px 14px; color: #70757a; font-size: 13px; }
+  .popbtn { margin-top: 6px; }
+  #account { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; margin: 10px 0 0; font-size: 12.5px; }
+  #account .btns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .locked { background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; padding: 10px; font-size: 12.5px; color: var(--muted); }
+  .locked .btns { display: flex; gap: 6px; margin-top: 8px; }
+  #authModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 2100; align-items: center; justify-content: center; }
+  #authModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; width: min(400px, 92vw); padding: 22px 24px; }
+  #authModal h3 { margin: 0 0 12px; font-size: 17px; }
+  #authModal input { margin: 5px 0; display: block; }
+  #authModal button { display: block; margin-top: 6px; }
+  .codein { font: 600 26px/1 ui-monospace, Menlo, Consolas, monospace !important; letter-spacing: 10px; text-align: center; }
+  #authModal .links { font-size: 12.5px; margin-top: 12px; display: flex; justify-content: space-between; }
+  #authModal a, #account a { color: var(--accent); cursor: pointer; }
+  .lvl { display: inline-block; min-width: 74px; text-align: center; border-radius: 10px; padding: 1px 8px;
+         font-size: 11px; font-weight: 650; color: #111; }
+  .lvl-low { background: #4ade80; } .lvl-moderate { background: #facc15; }
+  .lvl-high { background: #fb923c; } .lvl-very-high { background: #ef4444; color: #fff; } .lvl-unknown { background: #555; color: #fff; }
+  .olrow { display: grid; grid-template-columns: 74px 84px 1fr; gap: 6px; align-items: center; font-size: 12px; padding: 3px 0;
+           border-bottom: 1px solid var(--line); }
+  .olrow .w { color: var(--muted); font-size: 11px; }
+  .loc { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0; align-items: center; }
+  .loc .where { flex-basis: 100%; font-size: 11.5px; color: var(--muted); }
+  textarea { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+             padding: 6px 8px; font: inherit; width: 100%; resize: vertical; }
+  input[type=email], input[type=datetime-local], input[type=password] { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+             border-radius: 6px; padding: 6px 8px; font: inherit; width: 100%; color-scheme: dark; }
+  .stack > * { margin-top: 6px; }
+  .verdict { font-weight: 650; }
+  .v-clear { color: var(--ok); } .v-caution { color: #facc15; } .v-fire_nearby { color: var(--accent); }
+  .msg-ok { color: var(--ok); font-size: 12px; } .msg-err { color: var(--accent); font-size: 12px; }
+  .locbtn { width: 34px; height: 34px; line-height: 32px; text-align: center; font-size: 20px;
+            background: #fff; color: #333; cursor: pointer; display: block; text-decoration: none; }
+  .locbtn:hover { background: #f4f4f4; color: #1a73e8; }
+  .locbtn.busy { color: #1a73e8; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff;
+            box-shadow: 0 0 0 2px rgba(26,115,232,.4), 0 1px 4px rgba(0,0,0,.5); }
+  #pastbox { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; margin-top: 8px; font-size: 12px; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 6px 0 2px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+  #livebox { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; margin-top: 12px; font-size: 12px; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); margin-right: 6px; }
+  .pulse.on { background: var(--ok); box-shadow: 0 0 0 0 rgba(74,222,128,.6); animation: pulse 2s infinite; }
+  .pulse.busy { background: #facc15; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
+  .badge { background: var(--accent); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 11px; margin-left: 6px; }
+  .alertrow { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; margin: 5px 0; font-size: 12px; cursor: pointer; }
+  .alertrow.new { border-color: var(--accent); }
+  .alertrow b { color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <div class="side-head">
+    <div class="brandrow">
+      <img src="/static/img/logo-mark.png" alt="">
+      <h1>RED<span>ZONE</span></h1>
+      <a class="home" href="/" title="Welcome page and About">About</a>
+      <button class="home" id="acctChip" style="margin-left:6px;background:none;cursor:pointer">Sign in</button>
+    </div>
+    <div class="proto">Prototype · rules tested on one year (1 Nov 2025 to 1 Nov 2026)<br><span id="loadedLine">Data loaded: …</span></div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Services">
+      <button class="tab" role="tab" data-tab="map" id="tab-map"><span class="ti">🗺</span><span class="tl">Map</span><span class="tb" id="tb-map"></span></button>
+      <button class="tab" role="tab" data-tab="stats" id="tab-stats"><span class="ti">📊</span><span class="tl">Stats</span><span class="tb" id="tb-stats"></span></button>
+      <button class="tab" role="tab" data-tab="near" id="tab-near"><span class="ti">📍</span><span class="tl">Near me</span><span class="tb" id="tb-near"></span></button>
+      <button class="tab" role="tab" data-tab="outlook" id="tab-outlook"><span class="ti">🌡</span><span class="tl">Outlook</span><span class="tb" id="tb-outlook"></span></button>
+      <button class="tab" role="tab" data-tab="lookup" id="tab-lookup"><span class="ti">🕰</span><span class="tl">Look up</span><span class="tb" id="tb-lookup"></span></button>
+      <button class="tab" role="tab" data-tab="sites" id="tab-sites"><span class="ti">🛡</span><span class="tl">Sites</span><span class="tb" id="tb-sites"></span></button>
+      <button class="tab" role="tab" data-tab="events" id="tab-events"><span class="ti">📅</span><span class="tl">Events</span><span class="tb" id="tb-events"></span></button>
+      <button class="tab" role="tab" data-tab="email" id="tab-email"><span class="ti">✉</span><span class="tl">Email</span><span class="tb" id="tb-email"></span></button>
+      <button class="tab" role="tab" data-tab="data" id="tab-data"><span class="ti">🛰</span><span class="tl">Data</span><span class="tb" id="tb-data"></span></button>
+      <button class="tab" role="tab" data-tab="account" id="tab-account"><span class="ti">👤</span><span class="tl">Account</span><span class="tb" id="tb-account"></span></button>
+    </nav>
+    <div class="side-body" id="sideBody">
+      <section class="panel" data-tab="map" role="tabpanel">
+    <h2>Time period</h2>
+    <div class="row">
+      <input type="date" id="start">
+      <input type="date" id="end">
+    </div>
+    <div class="presets">
+      <button onclick="preset(1)">Last day</button>
+      <button onclick="preset(7)">7 days</button>
+      <button onclick="preset(30)">30 days</button>
+      <button onclick="preset(0)">All data</button>
+    </div>
+    <div class="note">Dates are in UTC. Long periods are slower to load.</div>
+
+    <h2>Sensors</h2>
+    <label><input type="checkbox" class="f-sensor" value="MODIS" checked>
+      <span class="dot" style="background:var(--modis)"></span> MODIS · 1 km</label>
+    <label><input type="checkbox" class="f-sensor" value="VIIRS" checked>
+      <span class="dot" style="background:var(--viirs)"></span> VIIRS · 375 m</label>
+
+    <h2>Confidence</h2>
+    <label><input type="checkbox" class="f-conf" value="high" checked> High</label>
+    <label><input type="checkbox" class="f-conf" value="nominal" checked> Nominal</label>
+    <label><input type="checkbox" class="f-conf" value="low" checked> Low</label>
+    <div class="note">Shared labels. MODIS: low &lt;30, nominal 30–79, high ≥80 (MODIS C6.1 User's Guide). VIIRS: l / n / h as given.</div>
+
+    <h2>Quality flags</h2>
+    <label><input type="checkbox" id="f-polar"> Show polar detections (&gt;75°N / &lt;60°S)</label>
+    <label><input type="checkbox" id="f-badfrp" checked> Show detections with zero/negative FRP</label>
+
+      </section>
+      <section class="panel" data-tab="stats" role="tabpanel">
+    <h2>In current map view</h2>
+    <div class="stat-grid">
+      <div class="card"><div class="k">MODIS detections</div><div class="v" id="s-modis">–</div><div class="s" id="s-modis-frp"></div></div>
+      <div class="card"><div class="k">VIIRS detections</div><div class="v" id="s-viirs">–</div><div class="s" id="s-viirs-frp"></div></div>
+    </div>
+    <div class="note" id="s-daynight"></div>
+    <div style="height:150px;margin-top:10px"><canvas id="chart"></canvas></div>
+    <div class="note">MODIS and VIIRS counts are not directly comparable: VIIRS pixels are ~7× smaller, so one fire often gives several VIIRS detections.</div>
+
+      </section>
+      <section class="panel" data-tab="near" role="tabpanel">
+    <h2>Near me</h2>
+    <button class="primary" onclick="locateMe()">📍 Find my location</button>
+    <select id="meRadius" style="width:auto;margin-left:6px">
+      <option value="10">10 km</option><option value="25" selected>25 km</option>
+      <option value="50">50 km</option><option value="100">100 km</option>
+    </select>
+    <div id="meBox" class="note">Uses your device's location if you allow it; otherwise an approximate location from your IP address. Your location stays on this page unless you save it as a priority site.</div>
+
+      </section>
+      <section class="panel" data-tab="outlook" role="tabpanel">
+    <h2>Fire-risk outlook · 7 days</h2>
+    <div class="note" style="margin-top:0">Weather forecast (Open-Meteo) turned into the Fosberg Fire Weather Index, adjusted with this area's fire history from our satellite data. A risk level — not a prediction that a fire will happen.</div>
+    <button style="margin-top:6px" onclick="loadOutlook(map.getCenter().lat, map.getCenter().lng, 'Map centre')">Outlook for map centre</button>
+    <div id="olBox"></div>
+
+      </section>
+      <section class="panel" data-tab="lookup" role="tabpanel">
+    <h2>Look up older data</h2>
+    <div class="note" style="margin-top:0">Ask NASA FIRMS for any area and up to 10 days. The result is shown on the map and can be downloaded, but it is <b>not saved</b> to REDZONE. Same cleaning rules as all other data.</div>
+    <div class="stack">
+      <div class="note" id="luArea">Area: current map view</div>
+      <div class="row">
+        <input type="date" id="luDate" title="First day (UTC)">
+        <select id="luDays" title="Number of days">
+          <option value="1">1 day</option><option value="2">2 days</option><option value="3" selected>3 days</option>
+          <option value="5">5 days</option><option value="7">7 days</option><option value="10">10 days</option></select>
+      </div>
+      <div class="presets" style="margin-top:0">
+        <button class="primary" id="luGo" onclick="runLookup()">Look up</button>
+        <button id="luClear" onclick="clearLookup()" style="display:none">Clear</button>
+        <a id="luCsv" class="note" style="display:none;align-self:center;color:var(--accent);cursor:pointer">Download CSV</a>
+      </div>
+      <div id="luMsg"></div>
+      <div id="luResult"></div>
+      <div class="note" id="luLimits"></div>
+    </div>
+
+      </section>
+      <section class="panel" data-tab="sites" role="tabpanel">
+    <h2>Priority sites</h2>
+    <div class="note" style="margin-top:0">Mark places to protect (e.g. a data center). Shows fires within the radius for the selected period; new fires create alerts.</div>
+    <div id="sitesLocked"></div>
+    <button class="primary" id="addSiteBtn" onclick="startPicking()" style="margin-top:8px">+ Add site on map</button>
+    <div id="siteForm" style="display:none;margin-top:8px" class="card">
+      <div class="k" id="siteCoords"></div>
+      <input type="text" id="siteName" placeholder="Site name (e.g. Data center A)" style="margin:6px 0">
+      <select id="siteRadius">
+        <option value="5">5 km radius</option><option value="10" selected>10 km radius</option>
+        <option value="25">25 km radius</option><option value="50">50 km radius</option><option value="100">100 km radius</option>
+      </select>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="primary" onclick="saveSite()">Save</button><button onclick="cancelSite()">Cancel</button>
+      </div>
+    </div>
+    <div id="sites"></div>
+    <h2>Alerts <span id="alertBadge"></span></h2>
+    <div id="alertsLocked"></div>
+    <div class="note" style="margin-top:0">New detections inside a priority site's radius, found during live updates.</div>
+    <div id="alerts" style="max-height:280px;overflow-y:auto"></div>
+
+      </section>
+      <section class="panel" data-tab="events" role="tabpanel">
+    <h2>My events</h2>
+    <div class="note" style="margin-top:0">Save an event. 12 hours before it starts, REDZONE checks for detected fires nearby and the fire-weather forecast; the result appears here. "Check now" gives a result at any time.</div>
+    <div id="evLocked"></div>
+    <div class="stack" id="evForm">
+      <input type="text" id="evName" placeholder="Event name (e.g. Hiking trip)">
+      <input type="datetime-local" id="evStart">
+      <textarea id="evDetails" rows="2" placeholder="Details (optional)"></textarea>
+      <div class="row">
+        <select id="evRadius"><option value="10">10 km</option><option value="25" selected>25 km</option><option value="50">50 km</option></select>
+
+      </div>
+      <div class="loc"><span class="where" id="evWhere">Location: not set</span>
+        <button onclick="setFormLoc('event','centre')">Map centre</button><button onclick="setFormLoc('event','me')">My location</button><button onclick="startPicking('event')">Pick on map</button></div>
+      <button class="primary" onclick="saveEvent()">Save event</button>
+      <div id="evMsg"></div>
+    </div>
+    <div id="events"></div>
+
+      </section>
+      <section class="panel" data-tab="email" role="tabpanel">
+    <div id="emailSection">
+    <h2>Email alerts</h2>
+    <div class="note" style="margin-top:0">Get an email when a <b>moderate- or high-confidence</b> fire with FRP above your threshold is detected near a place. You confirm by email first; every email has an unsubscribe link.</div>
+    <div class="stack">
+      <input type="email" id="subEmail" placeholder="your@email.com">
+      <input type="text" id="subName" placeholder="Place name (e.g. Home, Data center A)">
+      <div class="row">
+        <select id="subRadius"><option value="10">10 km</option><option value="25" selected>25 km</option><option value="50">50 km</option><option value="100">100 km</option></select>
+        <select id="subFrp" title="Minimum fire radiative power">
+          <option value="5">FRP ≥ 5 MW</option><option value="10" selected>FRP ≥ 10 MW</option>
+          <option value="25">FRP ≥ 25 MW</option><option value="50">FRP ≥ 50 MW</option><option value="100">FRP ≥ 100 MW</option></select>
+      </div>
+      <div class="loc"><span class="where" id="subWhere">Location: not set</span>
+        <button onclick="setFormLoc('sub','centre')">Map centre</button><button onclick="setFormLoc('sub','me')">My location</button><button onclick="startPicking('sub')">Pick on map</button></div>
+      <button class="primary" onclick="subscribe()">Subscribe to email alerts</button>
+      <div id="subMsg"></div>
+    </div>
+    <div class="note">FRP thresholds are a REDZONE choice: FRP measures a fire's heat output at the moment of the satellite pass; it is not an official danger scale, and MODIS and VIIRS values are not directly comparable.</div>
+    </div>
+
+      </section>
+      <section class="panel" data-tab="data" role="tabpanel">
+    <h2>Data</h2>
+    <div class="sub">Global active-fire detections · MODIS (Terra/Aqua) + VIIRS (NOAA-21)</div>
+    <div id="livebox">
+      <div><span class="pulse" id="pulse"></span><b id="liveTitle">Live updates</b></div>
+      <div class="note" id="liveText" style="margin-top:4px">Checking…</div>
+      <label style="margin-top:6px"><input type="checkbox" id="liveMode"> Live mode: last 48 h, auto-refresh</label>
+      <button id="updateBtn" onclick="updateNow()" style="display:none;margin-top:4px">Check FIRMS for new data now</button>
+    </div>
+    <div id="pastbox">
+      <div><b>Past data</b></div>
+      <div class="note" id="pastText" style="margin-top:4px">Loading…</div>
+      <div id="pastJob"></div>
+      <div id="pastAdmin" style="display:none;margin-top:6px">
+        <div class="note">Collect older days from NASA FIRMS (same rules as all other data):</div>
+        <div class="row" style="margin-top:4px"><input type="date" id="bfStart"><input type="date" id="bfEnd"></div>
+        <div class="presets">
+          <button onclick="bfAvail()">What does FIRMS have?</button>
+          <button class="primary" id="bfGo" onclick="bfRun()">Collect past data</button>
+          <button id="bfStop" onclick="bfCancel()" style="display:none">Stop</button>
+        </div>
+        <div id="bfAvailBox" class="note"></div>
+        <div id="bfMsg"></div>
+      </div>
+    </div>
+
+    <button onclick="openAbout()">About the data</button>
+      </section>
+      <section class="panel" data-tab="account" role="tabpanel">
+    <h2>Account</h2>
+    <div id="account">Checking your session…</div>
+      </section>
+    </div>
+  </aside>
+  <div id="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0"
+       title="Drag to resize · double-click to reset"></div>
+
+  <div class="mapwrap">
+    <div id="map"></div>
+    <div id="search">
+      <div class="box">
+        <span class="ico">⌕</span>
+        <input id="q" type="text" placeholder="Search a place, region or coordinates" autocomplete="off" spellcheck="false">
+        <button class="clear" id="qclear" title="Clear">×</button>
+      </div>
+      <div id="qres"></div>
+    </div>
+    <div id="status">Loading…</div>
+    <div id="legend"></div>
+  </div>
+</div>
+
+<div id="authModal" onclick="if(event.target===this)closeAuth()">
+  <div class="box" id="authBox"></div>
+</div>
+
+<div id="about" onclick="if(event.target===this)this.style.display='none'">
+  <div class="box">
+    <h2 style="border:0;margin-top:0;padding-top:0">About the data</h2>
+    <div id="aboutMeta" class="note"></div>
+    <h3>Sources</h3>
+    <ul>
+      <li>MODIS Collection 6.1 active fires (MCD14DL), Terra + Aqua, ~1 km pixels — NASA FIRMS.</li>
+      <li>VIIRS 375 m active fires, NOAA-21 — NASA FIRMS.</li>
+      <li>Archive (standard) data where available, near-real-time (NRT) data for the latest months. Past MODIS days come from MODIS_SP (standard quality); past VIIRS NOAA-21 days are only available from FIRMS as NRT.</li>
+    </ul>
+    <h3>What we did to the data</h3>
+    <ul>
+      <li>Harmonized both products into one format; no duplicates were found; nothing was deleted.</li>
+      <li>"Look up older data" asks NASA FIRMS for one area and up to 10 days, applies the same rules, and shows the result without saving it.</li>
+      <li>These rules were developed and tested on the one-year core set (1 Nov 2025 to 1 Nov 2026). Days added later through the FIRMS API (live updates and past-data collection) go through the same rules automatically, but have not been checked by hand as thoroughly.</li>
+      <li>Flagged 8 negative-FRP and 7,922 zero-FRP detections; their FRP is excluded from totals.</li>
+      <li>Flagged 391 polar detections (e.g. Mount Erebus volcano, Antarctica); hidden by default.</li>
+      <li>NRT records have no "type" field (NASA does not provide it), so volcanoes and industrial heat sources cannot be filtered out for the latest months.</li>
+    </ul>
+    <h3>Calibration notes</h3>
+    <ul id="notes"><li>Loading…</li></ul>
+    <h3>Planned features <span class="tag">not in this prototype</span></h3>
+    <ul>
+      <li>Email alerts and email verification (switch on when an email service is configured).</li>
+      <li>Phone (push) notifications.</li>
+      <li>Area selection by drawing a shape, with CSV export.</li>
+      <li>A trained fire-risk model using several years of history, vegetation and drought data (the current outlook uses fire weather + one year of history).</li>
+    </ul>
+    <button onclick="document.getElementById('about').style.display='none'">Close</button>
+  </div>
+</div>
+
+<script>
+// Every state-changing request carries this header; the server refuses those without it (CSRF protection).
+const _fetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+  const method = (opts.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") opts = { ...opts, headers: { ...(opts.headers || {}), "X-RedZone": "1" } };
+  return _fetch(url, { credentials: "same-origin", ...opts });
+};
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n == null ? "–" : Number(n).toLocaleString("en-US");
+const COLORS = { MODIS: "#38bdf8", VIIRS: "#fb923c" };
+let META = null, layer = null, chart = null, pending = null, sites = [], siteLayer = null, picked = null;
+
+// ---------- map ----------
+const map = L.map("map", { preferCanvas: true, worldCopyJump: true, minZoom: 2 }).setView([15, 20], 3);
+// Basemaps: several providers, so the map still works if one is down or blocked.
+const BASEMAPS = {
+  "Dark (CARTO)": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: "abcd", maxZoom: 18 }),
+  "Satellite (Esri)": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics", maxZoom: 18 }),
+  "Streets (OpenStreetMap)": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors", maxZoom: 18 }),
+};
+let baseName = "Dark (CARTO)";
+try { baseName = localStorage.getItem("redzone_basemap") || baseName; } catch {}
+if (!BASEMAPS[baseName]) baseName = "Dark (CARTO)";
+BASEMAPS[baseName].addTo(map);
+L.control.layers(BASEMAPS, null, { position: "topright" }).addTo(map);
+map.on("baselayerchange", (e) => { try { localStorage.setItem("redzone_basemap", e.name); } catch {} });
+
+// Automatic fallback: if many tiles of the current basemap fail, switch to the next one.
+const ORDER = Object.keys(BASEMAPS);
+for (const [name, lyr] of Object.entries(BASEMAPS)) {
+  let failed = 0, loaded = 0;
+  lyr.on("tileload", () => { loaded++; });
+  lyr.on("tileerror", () => {
+    failed++;
+    if (failed === 8 && loaded === 0 && map.hasLayer(lyr)) {
+      const next = BASEMAPS[ORDER[(ORDER.indexOf(name) + 1) % ORDER.length]];
+      map.removeLayer(lyr); next.addTo(map);
+      $("status").textContent = `${name} map tiles failed to load — switched basemap automatically`;
+    }
+  });
+}
+siteLayer = L.layerGroup().addTo(map);
+
+function filters() {
+  const sensors = [...document.querySelectorAll(".f-sensor:checked")].map(e => e.value).join(",");
+  const conf = [...document.querySelectorAll(".f-conf:checked")].map(e => e.value).join(",");
+  return new URLSearchParams({
+    start: $("start").value, end: $("end").value, sensors, conf,
+    show_polar: $("f-polar").checked, show_bad_frp: $("f-badfrp").checked });
+}
+function bboxParam() {
+  const b = map.getBounds();
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => v.toFixed(4)).join(",");
+}
+
+function heat(t) {   // t in 0..1 -> yellow -> orange -> red -> dark red
+  const stops = [[253,230,138],[251,146,60],[239,68,68],[127,29,29]];
+  const x = Math.min(Math.max(t, 0), 1) * (stops.length - 1), i = Math.min(Math.floor(x), stops.length - 2), f = x - i;
+  const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
+  return `rgb(${c.join(",")})`;
+}
+
+async function refresh() {
+  if (!META) return;
+  if (pending) pending.abort();
+  pending = new AbortController();
+  const signal = pending.signal;
+  $("status").textContent = "Loading…";
+  const p = filters(); p.set("bbox", bboxParam());
+  const pf = new URLSearchParams(p); pf.set("zoom", map.getZoom());
+  try {
+    const [fr, st] = await Promise.all([
+      fetch("/api/fires?" + pf, { signal }).then(r => r.json()),
+      fetch("/api/stats?" + p, { signal }).then(r => r.json())]);
+    drawFires(fr); drawStats(st);
+  } catch (e) { if (e.name !== "AbortError") $("status").textContent = "Error: " + e.message; }
+  refreshSites();
+  nearMe();
+}
+
+function drawFires(d) {
+  if (layer) map.removeLayer(layer);
+  layer = L.layerGroup();
+  if (d.mode === "grid") {
+    const max = Math.max(1, ...d.cells.map(c => c[2]));
+    for (const [s, w, n, nm, nv] of d.cells) {
+      const t = Math.log(n + 1) / Math.log(max + 1);
+      L.rectangle([[s, w], [s + d.cell, w + d.cell]], { stroke: false, fillColor: heat(t), fillOpacity: 0.35 + 0.5 * t })
+        .bindTooltip(`<b>${fmt(n)}</b> detections<br><span style="color:${COLORS.MODIS}">MODIS ${fmt(nm)}</span> · <span style="color:${COLORS.VIIRS}">VIIRS ${fmt(nv)}</span>`)
+        .addTo(layer);
+    }
+    $("status").textContent = `${fmt(d.cells.length)} grid cells (${d.cell.toFixed(2)}°) · zoom in to see individual detections`;
+    $("legend").innerHTML = `Detections per cell<div class="bar"></div><div style="display:flex;justify-content:space-between"><span>1</span><span>${fmt(max)}</span></div>`;
+  } else {
+    for (const [lat, lon, sensor, sat, time, conf, cls, frp, flag, dn, type, status] of d.points) {
+      const typeTxt = type == null ? "not provided (NRT)" : ({0:"presumed vegetation fire",1:"active volcano",2:"other static land source",3:"offshore"})[type] ?? type;
+      L.circleMarker([lat, lon], { radius: sensor === "MODIS" ? 6 : 4, color: COLORS[sensor], weight: 1,
+                                   fillColor: COLORS[sensor], fillOpacity: cls === "low" ? 0.35 : 0.8 })
+        .bindPopup(`<table class="pop">
+          <tr><td>Sensor</td><td><b style="color:${COLORS[sensor]}">${sensor}</b> (${sat})</td></tr>
+          <tr><td>Time (UTC)</td><td>${time} · ${dn === "D" ? "day" : "night"}</td></tr>
+          <tr><td>Confidence</td><td>${cls} (${conf})</td></tr>
+          <tr><td>FRP</td><td>${flag === "ok" ? frp.toFixed(1) + " MW" : frp + " MW <i>(flag: " + flag + ")</i>"}</td></tr>
+          <tr><td>Type</td><td>${typeTxt}</td></tr>
+          <tr><td>Data</td><td>${status}</td></tr>
+          <tr><td>Location</td><td>${lat.toFixed(4)}, ${lon.toFixed(4)}</td></tr></table>`)
+        .addTo(layer);
+    }
+    $("status").textContent = `${fmt(d.points.length)} detections` + (d.truncated ? " (limit reached — zoom in or shorten the period)" : "");
+    $("legend").innerHTML = `<div><span class="dot" style="background:${COLORS.MODIS}"></span> MODIS (larger dot)</div>
+      <div><span class="dot" style="background:${COLORS.VIIRS}"></span> VIIRS</div><div class="note" style="margin:2px 0 0">Faded = low confidence</div>`;
+  }
+  layer.addTo(map);
+}
+
+function drawStats(st) {
+  const get = (s) => st.by_sensor.find(x => x.sensor === s) || { n: 0, frp_sum: 0, day: 0, night: 0 };
+  const m = get("MODIS"), v = get("VIIRS");
+  $("s-modis").textContent = fmt(m.n); $("s-viirs").textContent = fmt(v.n);
+  $("s-modis-frp").textContent = `FRP total ${fmt(Math.round(m.frp_sum || 0))} MW`;
+  $("s-viirs-frp").textContent = `FRP total ${fmt(Math.round(v.frp_sum || 0))} MW`;
+  $("s-daynight").textContent = `Day / night — MODIS ${fmt(m.day)} / ${fmt(m.night)} · VIIRS ${fmt(v.day)} / ${fmt(v.night)}. FRP totals exclude zero/negative values; they are per sensor and not converted between sensors.`;
+
+  const dates = [...new Set(st.daily.map(d => d.date))];
+  const series = (s) => dates.map(dt => (st.daily.find(d => d.date === dt && d.sensor === s) || { n: 0 }).n);
+  const data = { labels: dates, datasets: ["MODIS", "VIIRS"].map(s => ({
+    label: s, data: series(s), borderColor: COLORS[s], backgroundColor: COLORS[s], borderWidth: 1.5, pointRadius: 0, tension: .2 })) };
+  if (chart) { chart.data = data; chart.update(); return; }
+  chart = new Chart($("chart"), { type: "line", data, options: {
+    maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
+    plugins: { legend: { labels: { color: "#8b93a3", boxWidth: 10 } } },
+    scales: { x: { ticks: { color: "#8b93a3", maxTicksLimit: 5 }, grid: { color: "#20242d" } },
+              y: { ticks: { color: "#8b93a3" }, grid: { color: "#20242d" }, beginAtZero: true } } } });
+}
+
+// ---------- dates ----------
+function addDays(iso, n) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function preset(days) {
+  $("end").value = META.max_date;
+  $("start").value = days === 0 ? META.min_date : addDays(META.max_date, -(days - 1));
+  refresh();
+}
+
+// ---------- priority sites ----------
+async function loadSites() { sites = ME ? await fetch("/api/sites").then(r => r.ok ? r.json() : []).catch(() => []) : []; }
+let pickTarget = "site";
+function startPicking(target = "site") {
+  pickTarget = target;
+  document.body.classList.add("picking");
+  $("status").textContent = "Click on the map to choose a location…";
+  if (target === "site") $("addSiteBtn").textContent = "Click on the map…";
+}
+map.on("click", (e) => {
+  if (!document.body.classList.contains("picking")) return;
+  document.body.classList.remove("picking"); $("addSiteBtn").textContent = "+ Add site on map";
+  if (pickTarget !== "site") {
+    const p = e.latlng.wrap(); setFormLocTo(pickTarget, p.lat, p.lng, "picked on map");
+    $("status").textContent = "Location chosen"; return; }
+  picked = e.latlng.wrap();
+  $("siteCoords").textContent = `Location: ${picked.lat.toFixed(4)}, ${picked.lng.toFixed(4)}`;
+  $("siteForm").style.display = "block"; $("siteName").focus();
+});
+async function saveSite() {
+  const body = { name: $("siteName").value.trim() || `Site ${sites.length + 1}`, lat: picked.lat, lon: picked.lng, radius_km: +$("siteRadius").value };
+  try { await postJSON("/api/sites", body); } catch (e) { alertNote(e.message); }
+  cancelSite(); await loadSites(); refreshSites();
+}
+function cancelSite() { $("siteForm").style.display = "none"; $("siteName").value = ""; picked = null; }
+async function removeSite(i) { await fetch("/api/sites/" + sites[i].id, { method: "DELETE" }); await loadSites(); refreshSites(); loadAlerts(); }
+
+async function refreshSites() {
+  siteLayer.clearLayers();
+  const box = $("sites"); box.innerHTML = "";
+  for (const [i, s] of sites.entries()) {
+    const p = filters(); p.set("lat", s.lat); p.set("lon", s.lon); p.set("radius_km", s.radius_km);
+    const div = document.createElement("div"); div.className = "site";
+    div.innerHTML = `<button class="x" onclick="removeSite(${i})">×</button><b>${s.name.replace(/</g, "&lt;")}</b> · ${s.radius_km} km<div class="note">checking…</div>`;
+    box.appendChild(div);
+    const r = await fetch("/api/near?" + p).then(x => x.json()).catch(() => null);
+    const hot = r && r.count > 0;
+    L.circle([s.lat, s.lon], { radius: s.radius_km * 1000, color: hot ? "#ff4d2e" : "#4ade80", weight: 2, fillOpacity: 0.06 }).addTo(siteLayer)
+      .bindTooltip(`${s.name}: ${r ? fmt(r.count) : "?"} detections within ${s.radius_km} km`);
+    L.circleMarker([s.lat, s.lon], { radius: 4, color: "#fff", fillColor: "#fff", fillOpacity: 1 }).addTo(siteLayer);
+    div.querySelector(".note").innerHTML = !r ? "error" : hot
+      ? `<span class="alert">⚠ ${fmt(r.count)} detections within ${s.radius_km} km</span><br>Nearest ${r.nearest_km.toFixed(1)} km · latest ${r.latest} UTC<br>MODIS ${fmt(r.modis)} · VIIRS ${fmt(r.viirs)}`
+      : `<span class="safe">✓ No detections within ${s.radius_km} km</span> in the selected period`;
+    div.onclick = (ev) => { if (ev.target.tagName !== "BUTTON") map.setView([s.lat, s.lon], 10); };
+  }
+}
+
+// ---------- about ----------
+async function openAbout() {
+  $("about").style.display = "flex";
+  $("aboutMeta").textContent = `${fmt(META.total)} detections · ${META.min_date} to ${META.max_date} (UTC)`;
+  const notes = await fetch("/api/notes").then(r => r.json()).catch(() => []);
+  $("notes").innerHTML = notes.length ? notes.map(n => `<li><b>${n.item}</b> (${n.sensor}): ${n.rule} <span class="note">— ${n.source}</span></li>`).join("")
+                                      : "<li>No calibration notes in the database yet.</li>";
+}
+
+// ---------- place search (like Google Maps) ----------
+let qTimer = null, qItems = [], qSel = -1, qSeq = 0, placeLayer = L.layerGroup().addTo(map);
+L.DomEvent.disableClickPropagation($("search")); L.DomEvent.disableScrollPropagation($("search"));
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+function parseCoords(t) {          // "33.89, 35.50" -> {lat, lon}
+  const m = t.trim().match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const lat = +m[1], lon = +m[2];
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+}
+
+function showResults(items, message) {
+  qItems = items; qSel = items.length ? 0 : -1;
+  const box = $("qres");
+  box.innerHTML = message ? `<div class="msg">${esc(message)}</div>` :
+    items.map((it, i) => `<div class="opt${i === 0 ? " sel" : ""}" data-i="${i}">${esc(it.name)}
+      <small>${esc([it.kind, it.detail].filter(Boolean).join(" · "))}</small></div>`).join("");
+  box.style.display = message || items.length ? "block" : "none";
+  box.querySelectorAll(".opt").forEach(el => el.onclick = () => choosePlace(qItems[+el.dataset.i]));
+}
+
+async function searchPlaces(text) {
+  const c = parseCoords(text);
+  if (c) return showResults([{ name: `${c.lat}, ${c.lon}`, kind: "coordinates", lat: c.lat, lon: c.lon }]);
+  if (text.trim().length < 3) return showResults([]);
+  const my = ++qSeq;
+  showResults([], "Searching…");
+  try {
+    const r = await fetch("/api/geocode?q=" + encodeURIComponent(text));
+    if (!r.ok) throw new Error();
+    const items = await r.json();
+    if (my === qSeq) showResults(items, items.length ? null : "No places found");
+  } catch { if (my === qSeq) showResults([], "Place search is unavailable right now"); }
+}
+
+async function choosePlace(it) {
+  if (!it) return;
+  $("q").value = it.name; $("qres").style.display = "none";
+  placeLayer.clearLayers();
+  if (it.extent) {
+    const [w, n, e, s] = it.extent;
+    map.fitBounds([[s, w], [n, e]], { maxZoom: 12, padding: [30, 30] });
+  } else {
+    map.setView([it.lat, it.lon], it.kind === "coordinates" ? 11 : 12);
+  }
+  const pop = L.popup({ closeButton: true }).setLatLng([it.lat, it.lon]).setContent(
+    `<b>${esc(it.name)}</b><br><span class="note">${esc(it.detail || it.kind || "")}</span><br>
+     <button class="popbtn" id="popSite">+ Add as priority site</button>`).openOn(map);
+  setTimeout(() => {
+    const b = document.getElementById("popSite");
+    if (b) b.onclick = () => {
+      map.closePopup(pop);
+      if (!ME) { openAuth("register"); return; }
+      showTab("sites");
+      picked = L.latLng(it.lat, it.lon);
+      $("siteCoords").textContent = `Location: ${it.lat.toFixed(4)}, ${it.lon.toFixed(4)}`;
+      $("siteName").value = it.name; $("siteForm").style.display = "block";
+      $("siteForm").scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+  }, 0);
+  loadOutlook(it.lat, it.lon, it.name);
+  if (it.osm_type === "R" || it.osm_type === "W") {          // areas: draw the outline
+    const r = await fetch(`/api/boundary?osm_type=${it.osm_type}&osm_id=${it.osm_id}`).then(x => x.ok ? x.json() : null).catch(() => null);
+    if (r && r.geometry) L.geoJSON(r.geometry, { style: { color: "#ffffff", weight: 2, dashArray: "6 4", fill: false } }).addTo(placeLayer);
+  }
+}
+
+$("q").addEventListener("input", (e) => {
+  $("qclear").style.display = e.target.value ? "block" : "none";
+  clearTimeout(qTimer); qTimer = setTimeout(() => searchPlaces(e.target.value), 300);
+});
+$("q").addEventListener("keydown", (e) => {
+  const opts = $("qres").querySelectorAll(".opt");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (!opts.length) return;
+    e.preventDefault();
+    qSel = (qSel + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
+    opts.forEach((o, i) => o.classList.toggle("sel", i === qSel));
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (qItems.length) choosePlace(qItems[Math.max(qSel, 0)]);
+    else { clearTimeout(qTimer); searchPlaces(e.target.value); }
+  } else if (e.key === "Escape") { $("qres").style.display = "none"; }
+});
+$("qclear").onclick = () => { $("q").value = ""; $("qclear").style.display = "none"; showResults([]); placeLayer.clearLayers(); $("q").focus(); };
+document.addEventListener("click", (e) => { if (!$("search").contains(e.target)) $("qres").style.display = "none"; });
+
+// ---------- my location ----------
+let me = null;
+const meLayer = L.layerGroup().addTo(map);
+const LocateControl = L.Control.extend({
+  options: { position: "topleft" },
+  onAdd() {
+    const bar = L.DomUtil.create("div", "leaflet-bar");
+    const a = L.DomUtil.create("a", "locbtn", bar);
+    a.id = "locbtn"; a.href = "#"; a.title = "Show my location"; a.innerHTML = "◎";
+    L.DomEvent.on(a, "click", (e) => { L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e); showTab("near"); locateMe(); });
+    return bar;
+  } });
+map.addControl(new LocateControl());
+
+function meText(html) { $("meBox").innerHTML = html; }
+function busy(on) { const b = $("locbtn"); if (b) b.classList.toggle("busy", on); }
+
+function locateMe() {
+  busy(true);
+  meText("Asking your browser for your location… (allow it in the pop-up)");
+  if (!navigator.geolocation) return ipLocate("Your browser has no location service.");
+  navigator.geolocation.getCurrentPosition(
+    (p) => setMe({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, method: "device" }),
+    (err) => ipLocate(err.code === 1 ? "Location permission was not given." : "Your device could not find its location."),
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+}
+
+async function ipLocate(reason) {
+  meText(`${esc(reason)} Trying an approximate location from your IP address…`);
+  const r = await fetch("/api/iplocation").then(x => x.ok ? x.json() : null).catch(() => null);
+  if (!r) { busy(false); return meText(`${esc(reason)} IP-based location is also unavailable.`); }
+  setMe({ lat: r.lat, lon: r.lon, acc: null, method: "ip", place: r.place, source: r.source, reason });
+}
+
+function setMe(m) {
+  busy(false);
+  me = m;
+  meLayer.clearLayers();
+  if (m.method === "device") {
+    if (m.acc) L.circle([m.lat, m.lon], { radius: m.acc, color: "#1a73e8", weight: 1, fillOpacity: 0.12 }).addTo(meLayer);
+    map.setView([m.lat, m.lon], Math.max(map.getZoom(), 10));
+  } else {
+    L.circle([m.lat, m.lon], { radius: 25000, color: "#1a73e8", weight: 1.5, dashArray: "5 5", fillOpacity: 0.05 })
+      .bindTooltip("Approximate area (IP-based)").addTo(meLayer);
+    map.setView([m.lat, m.lon], 9);
+  }
+  L.marker([m.lat, m.lon], { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
+    .bindTooltip("You are here" + (m.method === "ip" ? " (approximate)" : "")).addTo(meLayer);
+  nearMe();
+  loadOutlook(m.lat, m.lon, m.method === "ip" ? "My location (approximate)" : "My location");
+}
+
+async function nearMe() {
+  if (!me) return;
+  const radius = +$("meRadius").value;
+  const p = filters(); p.set("lat", me.lat); p.set("lon", me.lon); p.set("radius_km", radius);
+  const how = me.method === "device"
+    ? `Device location (accuracy about ${me.acc ? Math.round(me.acc).toLocaleString() + " m" : "unknown"}).`
+    : `<b>Approximate</b> location from your IP address${me.place ? " — " + esc(me.place) : ""} (${esc(me.source)}). IP locations can be off by tens of km. ${esc(me.reason || "")}`;
+  const r = await fetch("/api/near?" + p).then(x => x.json()).catch(() => null);
+  const result = !r ? "Could not check nearby fires."
+    : r.count > 0
+      ? `<span class="alert">⚠ ${fmt(r.count)} detections within ${radius} km</span> in the selected period.<br>Nearest ${r.nearest_km.toFixed(1)} km · latest ${r.latest} UTC · MODIS ${fmt(r.modis)} · VIIRS ${fmt(r.viirs)}`
+      : `<span class="safe">✓ No detections within ${radius} km</span> in the selected period.`;
+  meText(`<div class="card" style="margin-top:8px">${result}<div class="note">${how}</div>
+    <button style="margin-top:6px" onclick="saveMeAsSite()">+ Save as priority site (get alerts)</button></div>`);
+}
+
+function saveMeAsSite() {
+  if (!ME) { openAuth("register"); return; }
+  showTab("sites");
+  picked = L.latLng(me.lat, me.lon);
+  $("siteCoords").textContent = `Location: ${me.lat.toFixed(4)}, ${me.lon.toFixed(4)}` + (me.method === "ip" ? " (approximate)" : "");
+  $("siteName").value = "My location";
+  const r = String($("meRadius").value);
+  if ([...$("siteRadius").options].some(o => o.value === r)) $("siteRadius").value = r;
+  $("siteForm").style.display = "block";
+  $("siteForm").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+$("meRadius").addEventListener("change", nearMe);
+
+// ---------- form locations (alerts + events) ----------
+const formLoc = { sub: null, event: null };
+function setFormLocTo(kind, lat, lon, how) {
+  formLoc[kind] = { lat, lon };
+  $(kind === "sub" ? "subWhere" : "evWhere").textContent = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)} (${how})`;
+}
+function setFormLoc(kind, how) {
+  if (how === "centre") { const c = map.getCenter().wrap(); return setFormLocTo(kind, c.lat, c.lng, "map centre"); }
+  if (!me) { locateMe(); $(kind === "sub" ? "subWhere" : "evWhere").textContent = "Finding your location… click again when it's shown."; return; }
+  setFormLocTo(kind, me.lat, me.lon, me.method === "ip" ? "my location, approximate" : "my location");
+}
+function msg(id, text, ok) { $(id).innerHTML = `<div class="${ok ? "msg-ok" : "msg-err"}">${esc(text)}</div>`; }
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Please check the form fields");
+  return data;
+}
+
+// ---------- email alert subscription ----------
+async function subscribe() {
+  const loc = formLoc.sub;
+  if (!loc) return msg("subMsg", "Choose a location first (map centre, my location or pick on map).");
+  try {
+    const r = await postJSON("/api/subscriptions", { email: $("subEmail").value.trim(), name: $("subName").value.trim() || "My place",
+      lat: loc.lat, lon: loc.lon, radius_km: +$("subRadius").value, min_frp: +$("subFrp").value });
+    msg("subMsg", r.message, true);
+  } catch (e) { msg("subMsg", e.message); }
+}
+
+// ---------- fire-risk outlook ----------
+const lvlClass = (l) => "lvl lvl-" + String(l).replace(" ", "-");
+async function loadOutlook(lat, lon, label) {
+  $("olBox").innerHTML = `<div class="note">Loading the forecast for ${esc(label)}…</div>`;
+  const r = await fetch(`/api/outlook?lat=${lat}&lon=${lon}&radius_km=25`).then(x => x.ok ? x.json() : null).catch(() => null);
+  if (!r) { $("olBox").innerHTML = `<div class="msg-err">Weather forecast unavailable right now.</div>`; return; }
+  const d0 = r.days[0] || {};
+  const hist = d0.season_fires == null ? "Same season last year: not covered by our data."
+    : `Fires within 25 km (moderate/high confidence): ${fmt(d0.season_fires)} in this season last year, ${fmt(d0.recent_fires)} in the last 14 days of data.`;
+  $("olBox").innerHTML = `<div class="note">${esc(label)} · ${lat.toFixed(3)}, ${lon.toFixed(3)} · local days (${esc(r.timezone)})</div>` +
+    r.days.map(d => `<div class="olrow" title="${esc(d.reasons.join("; "))}">
+        <span>${new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span>
+        <span class="${lvlClass(d.level)}">${esc(d.level)}</span>
+        <span class="w">FFWI ${d.ffwi ?? "–"} · ${d.tmax ?? "–"}°C · RH ${d.rhmin ?? "–"}% · wind ${d.windmax ?? "–"} km/h · rain ${d.rain} mm</span></div>`).join("") +
+    `<div class="note">${hist} Hover a day to see why. FFWI ≥ 50 is generally significant (NOAA). Levels: REDZONE rules — FFWI bands, −1 level with ≥ 2 mm rain, +1 level for fire-prone history. Ignores vegetation/drought; history covers one year.</div>`;
+}
+
+// ---------- events ----------
+async function saveEvent() {
+  const loc = formLoc.event;
+  if (!$("evStart").value) return msg("evMsg", "Choose the event date and time.");
+  if (!loc) return msg("evMsg", "Choose the event location first.");
+  try {
+    const r = await postJSON("/api/events", { name: $("evName").value.trim() || "My event", details: $("evDetails").value,
+      lat: loc.lat, lon: loc.lon, radius_km: +$("evRadius").value, notify: false,
+      starts_at: new Date($("evStart").value).toISOString() });           // local time -> UTC
+    msg("evMsg", `Event saved. Automatic fire check: ${new Date(new Date($("evStart").value).getTime() - 12 * 3600e3).toLocaleString()}.`, true);
+    $("evName").value = $("evDetails").value = "";
+    loadEvents();
+  } catch (e) { msg("evMsg", e.message); }
+}
+
+async function loadEvents() {
+  const list = ME ? await fetch("/api/events").then(r => r.ok ? r.json() : []).catch(() => []) : [];
+  $("events").innerHTML = "";
+  for (const ev of list) {
+    const start = new Date(ev.starts_at);
+    const checkAt = new Date(start.getTime() - 12 * 3600 * 1000);
+    const res = ev.result;
+    const div = document.createElement("div"); div.className = "site";
+    div.innerHTML = `<button class="x" title="Delete">×</button><b>${esc(ev.name)}</b> · ${ev.radius_km} km
+      <div class="note">${start.toLocaleString()} (your time)${ev.details ? " · " + esc(ev.details) : ""}</div>
+      <div class="note">${ev.status === "checked" ? "12-hour check done" : "Automatic check: " + checkAt.toLocaleString()}
+</div>
+      ${res ? `<div class="verdict v-${ev.verdict}">${esc(res.headline)}</div>
+        ${res.weather ? `<div class="note">Event weather: FFWI ${res.weather.ffwi} (${res.weather.level}), max ${res.weather.tmax}°C, RH ${res.weather.rhmin}%, wind ${res.weather.windmax} km/h, rain ${res.weather.rain} mm</div>` : ""}
+        ${res.data_stale ? `<div class="msg-err">Satellite data may be out of date (newest ${esc(res.newest_data)} UTC).</div>` : ""}
+        <div class="note">Checked ${esc(ev.checked_at)} UTC. Not a safety guarantee — follow local authorities.</div>` : ""}
+      <button class="chk" style="margin-top:6px">Check now</button>`;
+    div.querySelector(".x").onclick = async (e) => { e.stopPropagation(); await fetch("/api/events/" + ev.id, { method: "DELETE" }); loadEvents(); };
+    div.querySelector(".chk").onclick = async (e) => {
+      e.stopPropagation(); e.target.textContent = "Checking…";
+      await fetch(`/api/events/${ev.id}/check`, { method: "POST" }); loadEvents(); };
+    div.onclick = () => map.setView([ev.lat, ev.lon], 10);
+    $("events").appendChild(div);
+  }
+}
+
+// ---------- accounts ----------
+let ME = null, EMAIL = false;
+async function loadMe() {
+  const r = await fetch("/api/auth/me").then(x => x.json()).catch(() => ({ user: null }));
+  ME = r.user; EMAIL = !!r.email_enabled;
+  $("tab-email").style.display = EMAIL ? "" : "none";
+  renderAccount();
+  await loadSites(); refreshSites(); loadAlerts(); loadEvents();
+  if (STATUS) pollStatus();
+  loadPast();
+  if (luInfo) loadLookupInfo();
+}
+function lockedBox(what) {
+  if (!ME) return `<div class="locked">Browsing as a guest. Create a free account to ${what}.
+    <div class="btns"><button class="primary" onclick="openAuth('register')">Create account</button><button onclick="openAuth('signin')">Sign in</button></div></div>`;
+  return "";
+}
+function renderAccount() {
+  $("acctChip").textContent = ME ? ME.name : "Sign in";
+  $("acctChip").title = ME ? "Your account" : "Sign in or create an account";
+  $("acctChip").onclick = () => ME ? showTab("account") : openAuth("signin");
+  $("account").innerHTML = ME
+    ? `Signed in as <b>${esc(ME.name)}</b> <span class="note">(${esc(ME.email)})</span>
+       <div class="btns"><button onclick="openAuth('account')">Account</button><button onclick="signOut()">Sign out</button></div>`
+    : `Browsing as a guest: the map, search and fire-risk outlook are free to use.
+       <div class="btns"><button class="primary" onclick="openAuth('register')">Create account</button><button onclick="openAuth('signin')">Sign in</button></div>`;
+  const ok = !!ME;
+  $("evLocked").innerHTML = lockedBox("save events and get a fire check 12 hours before");
+  $("evForm").style.display = ok ? "" : "none";
+  $("sitesLocked").innerHTML = lockedBox("save priority sites");
+  $("addSiteBtn").style.display = ok ? "" : "none";
+  $("alertsLocked").innerHTML = ME ? "" : lockedBox("get alerts for your priority sites");
+}
+function closeAuth() { $("authModal").style.display = "none"; }
+function openAuth(view) {
+  const views = {
+    signin: `<h3>Sign in</h3>
+      <input type="email" id="aEmail" placeholder="Email" autocomplete="email">
+      <input type="password" id="aPass" placeholder="Password" autocomplete="current-password">
+      <button class="primary" style="margin-top:6px" onclick="doSignIn()">Sign in</button><div id="aMsg"></div>
+      <div class="links">${EMAIL ? `<a onclick="resetEmail = $('aEmail').value; openAuth('forgot')">Forgot password?</a>` : "<span></span>"}<a onclick="openAuth('register')">Create an account</a></div>`,
+    register: `<h3>Create your account</h3>
+      <input type="text" id="aName" placeholder="Your name" autocomplete="name">
+      <input type="email" id="aEmail" placeholder="Email" autocomplete="email">
+      <input type="password" id="aPass" placeholder="Password (at least 10 characters)" autocomplete="new-password">
+      <input type="password" id="aPass2" placeholder="Repeat password" autocomplete="new-password">
+      <button class="primary" style="margin-top:6px" onclick="doRegister()">Create account</button><div id="aMsg"></div>
+      <div class="note">Your password is stored only as an Argon2id hash. ${EMAIL ? "" : "Keep it safe: password reset by email is not available yet."}</div>
+      <div class="links"><a onclick="openAuth('signin')">I already have an account</a></div>`,
+    forgot: `<h3>Reset your password</h3>
+      <div class="note">We'll email you a 6-digit code.</div>
+      <input type="email" id="aEmail" placeholder="Email" autocomplete="email" value="${esc(resetEmail)}">
+      <button class="primary" style="margin-top:6px" onclick="doForgot()">Send code</button><div id="aMsg"></div>
+      <div class="links"><a onclick="openAuth('signin')">Back to sign in</a><a onclick="resetEmail = $('aEmail').value; openAuth('reset')">I already have a code</a></div>`,
+    reset: `<h3>Choose a new password</h3>
+      <div class="note">Enter the 6-digit code sent to <b>${esc(resetEmail)}</b> and your new password.</div>
+      <input type="text" id="aCode" class="codein" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <input type="password" id="aPass" placeholder="New password (at least 10 characters)" autocomplete="new-password">
+      <input type="password" id="aPass2" placeholder="Repeat new password" autocomplete="new-password">
+      <button class="primary" onclick="doReset()">Save new password</button><div id="aMsg"></div>
+      <div class="links"><a onclick="openAuth('forgot')">Send a new code</a><a onclick="openAuth('signin')">Back to sign in</a></div>`,
+    account: `<h3>Your account</h3>
+      <div class="note">${esc(ME ? ME.email : "")}</div>
+      <div class="k" style="margin-top:12px;font-size:12px;color:var(--muted)">Change password</div>
+      <input type="password" id="aCur" placeholder="Current password" autocomplete="current-password">
+      <input type="password" id="aNew" placeholder="New password (at least 10 characters)" autocomplete="new-password">
+      <button onclick="doChange()">Change password</button>
+      <div style="margin-top:12px"><button onclick="doLogoutAll()">Sign out on all devices</button></div>
+      <div class="k" style="margin-top:14px;font-size:12px;color:var(--muted)">Delete account (removes your events, sites and alerts)</div>
+      <input type="password" id="aDel" placeholder="Password to confirm" autocomplete="current-password">
+      <button onclick="doDelete()">Delete my account</button><div id="aMsg"></div>
+      <div class="links"><a onclick="closeAuth()">Close</a></div>`,
+  };
+  $("authBox").innerHTML = views[view];
+  $("authModal").style.display = "flex";
+  const first = $("authBox").querySelector("input"); if (first) first.focus();
+  const ci = $("aCode"); if (ci) ci.addEventListener("input", () => { ci.value = ci.value.replace(/\D/g, "").slice(0, 6); });
+  $("authBox").querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => {
+    if (e.key === "Enter") { const b = $("authBox").querySelector("button.primary"); if (b) b.click(); } }));
+}
+async function authCall(url, body, okText) {
+  try { const r = await postJSON(url, body); msg("aMsg", r.message || okText || "Done.", true); return true; }
+  catch (e) { msg("aMsg", e.message); return false; }
+}
+async function doSignIn() {
+  if (await authCall("/api/auth/login", { email: $("aEmail").value, password: $("aPass").value }, "Signed in.")) { closeAuth(); loadMe(); }
+}
+let resetEmail = "";
+async function doRegister() {
+  if ($("aPass").value !== $("aPass2").value) return msg("aMsg", "The two passwords are different.");
+  if (await authCall("/api/auth/register", { name: $("aName").value, email: $("aEmail").value, password: $("aPass").value })) {
+    setTimeout(() => { closeAuth(); loadMe(); }, 900); }
+}
+async function doForgot() {
+  resetEmail = $("aEmail").value.trim();
+  if (await authCall("/api/auth/forgot", { email: resetEmail })) setTimeout(() => openAuth("reset"), 900);
+}
+async function doReset() {
+  if ($("aPass").value !== $("aPass2").value) return msg("aMsg", "The two passwords are different.");
+  if (await authCall("/api/auth/reset", { email: resetEmail, code: $("aCode").value, password: $("aPass").value })) {
+    setTimeout(() => openAuth("signin"), 1200); }
+}
+async function doChange() { await authCall("/api/auth/change-password", { current_password: $("aCur").value, new_password: $("aNew").value }); }
+async function doLogoutAll() { await postJSON("/api/auth/logout-all", {}).catch(() => {}); closeAuth(); loadMe(); }
+async function doDelete() {
+  if (!confirmDelete()) return;
+  if (await authCall("/api/auth/delete-account", { password: $("aDel").value }, "Account deleted.")) { setTimeout(() => { closeAuth(); loadMe(); }, 1200); }
+}
+function confirmDelete() { return $("aDel").value.length > 0 || (msg("aMsg", "Enter your password to confirm."), false); }
+async function signOut() { await postJSON("/api/auth/logout", {}).catch(() => {}); loadMe(); }
+function alertNote(t) { $("status").textContent = t; }
+
+// ---------- past data (backfill) ----------
+let pastTimer = null;
+const sensorName = { MODIS: "MODIS", VIIRS: "VIIRS" };
+function fmtDay(d) { return new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }); }
+async function loadPast() {
+  const r = await fetch("/api/backfill").then(x => x.ok ? x.json() : null).catch(() => null);
+  if (!r) return;
+  const by = {};
+  for (const c of r.coverage) {
+    const b = by[c.sensor] || (by[c.sensor] = { first: c.first, last: c.last, rows: 0 });
+    b.first = c.first < b.first ? c.first : b.first; b.last = c.last > b.last ? c.last : b.last; b.rows += c.rows;
+  }
+  const lines = Object.entries(by).map(([k, b]) => `${sensorName[k] || k}: ${fmtDay(b.first)} to ${fmtDay(b.last)} (${fmt(b.rows)} detections)`);
+  $("pastText").innerHTML = lines.map(esc).join("<br>") +
+    `<br>Rules were tested on ${fmtDay(r.core_tested.first)} to ${fmtDay(r.core_tested.last)}; other days use the same rules automatically.`;
+  const all = Object.values(by);
+  if (all.length) $("loadedLine").textContent = `Data loaded: ${fmtDay(all.map(b => b.first).sort()[0])} to ${fmtDay(all.map(b => b.last).sort().at(-1))}`;
+  const j = r.job;
+  if (j) {
+    const pct = j.days_total ? Math.round(100 * j.days_done / j.days_total) : 0;
+    const label = { running: "Collecting", finished: "Last collection finished", cancelled: "Last collection stopped",
+                    failed: "Last collection failed", interrupted: "Last collection interrupted" }[j.status] || j.status;
+    $("pastJob").innerHTML = `<div class="note" style="margin-top:6px"><b>${label}</b> · ${fmtDay(j.start)} to ${fmtDay(j.end)}</div>
+      ${j.status === "running" ? `<div class="bar"><div style="width:${pct}%"></div></div>` : ""}
+      <div class="note">${j.days_done}/${j.days_total} sensor-days · added ${fmt(j.inserted)} · replaced NRT ${fmt(j.replaced)} · skipped ${fmt(j.skipped)}${j.rejected ? " · rejected " + fmt(j.rejected) : ""}</div>
+      ${j.message ? `<div class="msg-err">${esc(j.message)}</div>` : ""}
+      ${["interrupted", "cancelled", "failed"].includes(j.status) && ME && ME.admin ? `<div class="note">Run the same dates again to continue: finished days are skipped.</div>` : ""}`;
+  } else $("pastJob").innerHTML = "";
+  const admin = !!(ME && ME.admin && STATUS && STATUS.key_configured);
+  $("pastAdmin").style.display = admin ? "" : "none";
+  $("bfGo").style.display = r.running ? "none" : ""; $("bfStop").style.display = r.running ? "" : "none";
+  clearTimeout(pastTimer);
+  pastTimer = setTimeout(loadPast, r.running ? 5000 : 60000);
+  if (!r.running && pastWasRunning) { pastWasRunning = false; pollStatus(); }
+  if (r.running) pastWasRunning = true;
+}
+let pastWasRunning = false;
+async function bfAvail() {
+  $("bfAvailBox").textContent = "Asking FIRMS…";
+  try {
+    const r = await fetch("/api/backfill/availability");
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "failed");
+    $("bfAvailBox").innerHTML = d.map(a => `${esc(a.source)}: ${fmtDay(a.first)} to ${fmtDay(a.last)}`).join("<br>") +
+      "<br>MODIS uses standard-quality data (SP) where available; VIIRS NOAA-21 is only offered as NRT.";
+  } catch (e) { $("bfAvailBox").innerHTML = `<span class="msg-err">${esc(e.message)}</span>`; }
+}
+async function bfRun() {
+  if (!$("bfStart").value || !$("bfEnd").value) return msg("bfMsg", "Choose a start and an end date.");
+  try { await postJSON("/api/backfill", { start: $("bfStart").value, end: $("bfEnd").value }); msg("bfMsg", "Started. Progress updates every few seconds.", true); }
+  catch (e) { msg("bfMsg", e.message); }
+  loadPast();
+}
+async function bfCancel() { await postJSON("/api/backfill/cancel", {}).catch(() => {}); msg("bfMsg", "Stopping after the current day…", true); loadPast(); }
+
+// ---------- look up older data (not saved) ----------
+let LU = null, luInfo = null, luParams = null;
+const luLayer = L.layerGroup().addTo(map);
+const TYPE_NAMES = { 0: "presumed vegetation fire", 1: "active volcano", 2: "other static land source", 3: "offshore" };
+let luPreview = null;
+function luBox() {
+  // the map view, or its central part when the view is larger than the allowed box
+  const max = luInfo ? luInfo.max_deg : 10, b = map.getBounds(), c = map.getCenter().wrap();
+  let w = Math.max(b.getWest(), -180), e = Math.min(b.getEast(), 180), s = Math.max(b.getSouth(), -90), n = Math.min(b.getNorth(), 90);
+  let clipped = false;
+  if (e - w > max) { w = Math.max(-180, Math.min(c.lng - max / 2, 180 - max)); e = w + max; clipped = true; }
+  if (n - s > max) { s = Math.max(-90, Math.min(c.lat - max / 2, 90 - max)); n = s + max; clipped = true; }
+  return { west: +w.toFixed(4), south: +s.toFixed(4), east: +e.toFixed(4), north: +n.toFixed(4), dx: e - w, dy: n - s, clipped };
+}
+function luCheckArea() {
+  if (!luInfo) return;
+  const b = luBox();
+  if (luPreview) { map.removeLayer(luPreview); luPreview = null; }
+  if (b.clipped) {
+    luPreview = L.rectangle([[b.south, b.west], [b.north, b.east]], { color: "#ffffff", weight: 1.5, dashArray: "6 6", fill: false, interactive: false }).addTo(map);
+    $("luArea").innerHTML = `Area: the dashed box in the middle of the map (${b.dx.toFixed(0)}° × ${b.dy.toFixed(0)}°, the largest allowed). Zoom in for a smaller area.`;
+  } else {
+    $("luArea").innerHTML = `Area: current map view, ${b.dx.toFixed(1)}° × ${b.dy.toFixed(1)}° <span class="safe">✓</span>`;
+  }
+  $("luGo").disabled = !(b.dx > 0 && b.dy > 0);
+}
+async function loadLookupInfo() {
+  luInfo = await fetch("/api/lookup/info").then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!luInfo) return;
+  const p = Object.fromEntries(luInfo.products.map(x => [x.source, x]));
+  const viirs = p.VIIRS_NOAA21_NRT, modis = p.MODIS_SP;
+  const today = new Date().toISOString().slice(0, 10);
+  $("luDate").min = luInfo.first_day; $("luDate").max = today;
+  if (!$("luDate").value && META) $("luDate").value = addDays(META.min_date, -30);
+  $("luLimits").innerHTML = (luInfo.enabled
+      ? `Up to ${luInfo.max_days} days and ${luInfo.max_deg}° × ${luInfo.max_deg}°. You can make ${luInfo.per_hour} FIRMS look-ups an hour${luInfo.signed_in ? "" : " (20 when signed in)"}.`
+      : "Look-up from NASA FIRMS is not set up on this server: only days already in REDZONE can be shown.")
+    + (viirs ? ` Both sensors from ${fmtDay(viirs.first)}` : "") + (modis ? `; MODIS alone from ${fmtDay(modis.first)}.` : "");
+  luCheckArea();
+}
+function luPopup(p) {
+  const [lat, lon, sensor, sat, time, conf, cls, frp, flag, dn, type, status, origin] = p;
+  return `<table class="pop">
+    <tr><td>Sensor</td><td><b style="color:${COLORS[sensor]}">${sensor}</b> (${esc(sat)})</td></tr>
+    <tr><td>Time (UTC)</td><td>${esc(time)} · ${dn === "D" ? "day" : "night"}</td></tr>
+    <tr><td>Confidence</td><td>${esc(cls)} (${esc(conf)})</td></tr>
+    <tr><td>FRP</td><td>${frp == null ? "–" : (flag === "ok" ? frp.toFixed(1) + " MW" : frp + " MW <i>(flag: " + flag + ")</i>")}</td></tr>
+    <tr><td>Type</td><td>${type == null ? "not provided (NRT)" : (TYPE_NAMES[type] ?? esc(type))}</td></tr>
+    <tr><td>Data</td><td>${esc(status)}</td></tr>
+    <tr><td>Source</td><td>${origin === "FIRMS" ? "<b>looked up from NASA FIRMS</b> (not saved)" : "REDZONE database"}</td></tr></table>`;
+}
+function drawLookup() {
+  luLayer.clearLayers();
+  if (!LU) return;
+  const f = filters(), sensors = f.get("sensors").split(","), conf = f.get("conf").split(",");
+  const polar = f.get("show_polar") === "true", bad = f.get("show_bad_frp") === "true";
+  let shown = 0;
+  for (const p of LU.points) {
+    const [lat, , sensor, , , , cls, , flag] = p;
+    if (!sensors.includes(sensor) || !conf.includes(cls)) continue;
+    if (!polar && (lat > 75 || lat < -60)) continue;
+    if (!bad && flag !== "ok") continue;
+    L.circleMarker([p[0], p[1]], { radius: sensor === "MODIS" ? 6 : 4, color: "#ffffff", weight: 1.5,
+        fillColor: COLORS[sensor], fillOpacity: cls === "low" ? 0.35 : 0.85 }).bindPopup(luPopup(p)).addTo(luLayer);
+    shown++;
+  }
+  return shown;
+}
+async function runLookup() {
+  const b = luBox(), day = $("luDate").value, days = +$("luDays").value;
+  if (!day) return msg("luMsg", "Choose the first day.");
+  luParams = new URLSearchParams({ west: b.west, south: b.south, east: b.east, north: b.north, start: day, days });
+  $("luGo").disabled = true; $("luGo").textContent = "Looking up…"; $("luMsg").innerHTML = "";
+  try {
+    const r = await fetch("/api/lookup?" + luParams);
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : "The look-up failed.");
+    LU = d;
+    const shown = drawLookup();
+    const c = (s) => d.counts[s] ? `${s}: <b>${fmt(d.counts[s].total)}</b> <span class="note">(${fmt(d.counts[s].database)} from REDZONE, ${fmt(d.counts[s].FIRMS)} from FIRMS)</span>` : `${s}: 0`;
+    $("luResult").innerHTML = `<div class="card" style="margin-top:4px">
+        <div><b>${fmtDay(d.start)}${d.end !== d.start ? " to " + fmtDay(d.end) : ""}</b> · looked-up dots have a white ring</div>
+        <div style="margin-top:4px">${c("MODIS")}<br>${c("VIIRS")}</div>
+        <div class="note">${fmt(shown)} shown with your current filters${d.truncated ? " (first 30,000 only; download the CSV for all)" : ""}.</div>
+        <div class="note">${d.sources.map(esc).join("<br>")}</div>
+        ${d.notes.length ? `<div class="note" style="color:#facc15">${d.notes.map(esc).join("<br>")}</div>` : ""}
+        <div class="note">Not saved to REDZONE. Looked-up days are not part of the statistics above.</div></div>`;
+    $("luClear").style.display = ""; $("luCsv").style.display = "";
+    $("luCsv").onclick = () => { window.location = "/api/lookup.csv?" + luParams; };
+  } catch (e) { msg("luMsg", e.message); }
+  $("luGo").textContent = "Look up"; luCheckArea();
+}
+function clearLookup() { LU = null; luLayer.clearLayers(); $("luResult").innerHTML = ""; $("luClear").style.display = "none"; $("luCsv").style.display = "none"; }
+map.on("moveend", luCheckArea);
+document.querySelectorAll("aside input[type=checkbox]").forEach(el => el.addEventListener("change", drawLookup));
+
+// ---------- live ----------
+let STATUS = null, liveTimer = null;
+const SEEN_KEY = "redzone_seen_alert";
+function seenAlert() { try { return +(localStorage.getItem(SEEN_KEY) || 0); } catch { return 0; } }
+function markSeen(id) { try { localStorage.setItem(SEEN_KEY, id); } catch {} }
+
+async function pollStatus() {
+  const st = await fetch("/api/status").then(r => r.json()).catch(() => null);
+  if (!st) { $("liveText").textContent = "Server not reachable"; return; }
+  const changed = STATUS && (st.total !== STATUS.total || st.max_date !== STATUS.max_date);
+  STATUS = st;
+  $("pulse").className = "pulse " + (st.running ? "busy" : st.key_configured ? "on" : "");
+  $("updateBtn").style.display = st.key_configured && ME && ME.admin ? "inline-block" : "none";
+  $("updateBtn").disabled = st.running;
+  $("pastAdmin").style.display = st.key_configured && ME && ME.admin ? "" : "none";
+  let t;
+  if (!st.key_configured) t = "Off — set FIRMS_MAP_KEY on the server to download new data automatically.";
+  else if (st.running) t = "Downloading new data from FIRMS…";
+  else {
+    t = `Automatic check every ${st.update_hours} h. Last check: ${st.last_run || "not yet"}.`;
+    if (st.last_result) t += ` Added ${fmt(st.last_result.inserted)} new detections, ${fmt(st.last_result.alerts)} alerts, ${fmt(st.last_result.emails || 0)} emails.`;
+    if (st.last_error) t += ` Last error: ${st.last_error}`;
+  }
+  $("liveText").textContent = `${t} Newest detection: ${st.newest_detection} UTC.`;
+  if (changed) {
+    META = await fetch("/api/meta").then(r => r.json());
+    for (const id of ["start", "end"]) { $(id).max = META.max_date; }
+    if ($("liveMode").checked) preset(2); else refresh();
+    loadAlerts();
+  }
+}
+
+async function updateNow() {
+  await fetch("/api/update", { method: "POST" });
+  pollStatus();
+}
+
+function setLive(on) {
+  $("start").disabled = $("end").disabled = on;
+  if (on) preset(2);
+  clearInterval(liveTimer);
+  liveTimer = setInterval(() => { if ($("liveMode").checked) refresh(); }, 5 * 60 * 1000);
+}
+$("liveMode").addEventListener("change", (e) => setLive(e.target.checked));
+
+async function loadAlerts() {
+  const list = ME ? await fetch("/api/alerts?limit=30").then(r => r.ok ? r.json() : []).catch(() => []) : [];
+  const seen = seenAlert(), fresh = list.filter(a => a.id > seen).length;
+  $("alertBadge").innerHTML = fresh ? `<span class="badge">${fresh} new</span>` : "";
+  $("tb-sites").textContent = fresh ? fresh : "";
+  $("alerts").innerHTML = list.length || !ME ? "" : `<div class="note">No alerts yet.</div>`;
+  for (const a of list) {
+    const div = document.createElement("div");
+    div.className = "alertrow" + (a.id > seen ? " new" : "");
+    div.innerHTML = `<b>${a.site.replace(/</g, "&lt;")}</b> · fire ${a.km.toFixed(1)} km away<br>
+      <span class="note">${a.time} UTC · ${a.sensor} · confidence ${a.confidence} · FRP ${a.frp} MW${a.frp_flag !== "ok" ? " (" + a.frp_flag + ")" : ""}</span>`;
+    div.onclick = () => { map.setView([a.lat, a.lon], 11); L.popup().setLatLng([a.lat, a.lon]).setContent(`Alert: ${a.site}`).openOn(map); };
+    $("alerts").appendChild(div);
+  }
+  if (list.length) setTimeout(() => markSeen(list[0].id), 10000);   // count as seen after 10 s
+}
+
+// ---------- tabs (one service at a time) ----------
+const TAB_KEY = "redzone_tab";
+function showTab(name, opts = {}) {
+  if (name === "email" && !EMAIL) name = "map";
+  if (!document.querySelector(`.panel[data-tab="${name}"]`)) name = "map";
+  document.querySelectorAll(".tab").forEach(b => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle("active", on); b.setAttribute("aria-selected", on ? "true" : "false"); b.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.dataset.tab === name));
+  if (!opts.keepScroll) $("sideBody").scrollTop = 0;
+  const btn = $("tab-" + name);
+  if (btn) btn.scrollIntoView({ inline: "center", block: "nearest", behavior: opts.instant ? "auto" : "smooth" });
+  try { localStorage.setItem(TAB_KEY, name); } catch {}
+  if (name === "stats" && chart) setTimeout(() => chart.resize(), 0);
+}
+(() => {
+  const bar = $("tabs");
+  bar.addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
+  bar.addEventListener("wheel", (e) => {                    // mouse wheel scrolls the tab bar sideways
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { bar.scrollLeft += e.deltaY; e.preventDefault(); }
+  }, { passive: false });
+  bar.addEventListener("keydown", (e) => {                  // arrow keys move between tabs
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const tabs = [...bar.querySelectorAll(".tab")].filter(t => t.style.display !== "none");
+    const i = tabs.findIndex(t => t.classList.contains("active"));
+    const next = tabs.at((i + (e.key === "ArrowRight" ? 1 : -1)) % tabs.length);
+    showTab(next.dataset.tab); next.focus(); e.preventDefault();
+  });
+  let saved = "map";
+  try { saved = localStorage.getItem(TAB_KEY) || "map"; } catch {}
+  showTab(saved, { instant: true });
+})();
+
+// ---------- resizable side panel ----------
+(() => {
+  const MIN = 260, DEFAULT = 340, KEY = "redzone_side_w";
+  const max = () => Math.max(MIN, Math.min(720, window.innerWidth - 320));      // always leave room for the map
+  let frame = 0;
+  const apply = (w, save) => {
+    w = Math.round(Math.min(Math.max(w, MIN), max()));
+    document.documentElement.style.setProperty("--side-w", w + "px");
+    cancelAnimationFrame(frame); frame = requestAnimationFrame(() => map.invalidateSize({ pan: false }));
+    if (chart) chart.resize();
+    if (save) { try { localStorage.setItem(KEY, w); } catch {} }
+    return w;
+  };
+  let saved = DEFAULT;
+  try { saved = +(localStorage.getItem(KEY) || DEFAULT); } catch {}
+  apply(saved, false);
+  const bar = $("resizer");
+  bar.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); bar.setPointerCapture(e.pointerId);
+    bar.classList.add("dragging"); document.body.classList.add("resizing");
+  });
+  bar.addEventListener("pointermove", (e) => { if (bar.hasPointerCapture(e.pointerId)) apply(e.clientX, false); });
+  const end = (e) => {
+    if (!bar.hasPointerCapture(e.pointerId)) return;
+    bar.releasePointerCapture(e.pointerId); bar.classList.remove("dragging"); document.body.classList.remove("resizing");
+    apply(e.clientX, true);
+  };
+  bar.addEventListener("pointerup", end); bar.addEventListener("pointercancel", end);
+  bar.addEventListener("dblclick", () => apply(DEFAULT, true));
+  bar.addEventListener("keydown", (e) => {                                     // keyboard: arrow keys
+    const cur = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--side-w")) || DEFAULT;
+    if (e.key === "ArrowLeft") { e.preventDefault(); apply(cur - 20, true); }
+    if (e.key === "ArrowRight") { e.preventDefault(); apply(cur + 20, true); }
+  });
+  window.addEventListener("resize", () => apply(parseInt(getComputedStyle(document.documentElement).getPropertyValue("--side-w")) || DEFAULT, false));
+})();
+
+// ---------- start ----------
+let timer = null;
+const later = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
+map.on("moveend", later);
+document.querySelectorAll("aside input[type=checkbox], #start, #end").forEach(el => el.addEventListener("change", later));
+
+(async () => {
+  META = await fetch("/api/meta").then(r => r.json());
+  for (const id of ["start", "end"]) { $(id).min = META.min_date; $(id).max = META.max_date; }
+  await loadMe();
+  preset(7);
+  loadLookupInfo();
+  const qp = new URLSearchParams(location.search);              // links from alert emails
+  if (qp.get("lat") && qp.get("lon")) map.setView([+qp.get("lat"), +qp.get("lon")], +(qp.get("z") || 10));
+  loadEvents(); setInterval(loadEvents, 5 * 60 * 1000);
+  pollStatus(); loadAlerts();
+  setInterval(pollStatus, 60 * 1000);
+})();
+</script>
+</body>
+</html>

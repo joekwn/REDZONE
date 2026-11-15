@@ -1,0 +1,9 @@
+pandas
+pyarrow
+numpy
+duckdb
+fastapi
+uvicorn[standard]
+pydantic
+argon2-cffi
+matplotlib

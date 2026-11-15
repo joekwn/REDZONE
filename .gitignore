@@ -1,0 +1,13 @@
+﻿# data, database and secrets: never upload
+data/
+*.duckdb
+*.duckdb.wal
+*.key
+*.env
+*.parquet
+*.zip
+
+# Python and editor clutter
+__pycache__/
+.venv/
+.vscode/
