@@ -242,7 +242,7 @@
 
 <footer>
   <div class="wrap">
-    <div>REDZONE · a NASA Space Apps prototype</div>
+    <div>REDZONE · a NASA Space Apps prototype · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div>
     <div>Fire data: NASA FIRMS (MODIS C6.1, VIIRS 375 m NOAA-21) · Weather: Open-Meteo · Maps and search: OpenStreetMap, CARTO, Esri</div>
   </div>
 </footer>
@@ -251,6 +251,7 @@
   // show which days are loaded right now
   fetch("/api/meta").then(r => r.ok ? r.json() : null).then(m => {
     if (!m) return;
+    if (!m.total) { document.getElementById("cov").innerHTML = "No data loaded yet on this server."; return; }
     const f = d => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
     document.getElementById("cov").innerHTML = `Data loaded right now: <b>${f(m.min_date)} to ${f(m.max_date)}</b> (${Number(m.total).toLocaleString("en-US")} detections).`;
   }).catch(() => {});

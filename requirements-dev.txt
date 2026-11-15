@@ -1,0 +1,4 @@
+# For running the tests:  py -m pip install -r requirements-dev.txt  then  py -m pytest
+-r requirements.txt
+pytest
+httpx

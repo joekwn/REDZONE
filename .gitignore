@@ -1,13 +1,29 @@
-﻿# data, database and secrets: never upload
+# ---- data, databases and secrets: never commit ----
 data/
 *.duckdb
 *.duckdb.wal
 *.key
+.env
 *.env
+!.env.example
+!deploy/redzone.env.example
 *.parquet
+*.eml
 *.zip
 
-# Python and editor clutter
+# ---- Python ----
 __pycache__/
+*.py[cod]
 .venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# ---- editors / OS ----
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Vercel ----
+.vercel/

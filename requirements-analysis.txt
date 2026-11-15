@@ -1,0 +1,5 @@
+# Everything above, plus what the data pipeline and calibration scripts need on your computer:
+#     py -m pip install -r requirements-analysis.txt
+-r requirements.txt
+pyarrow
+matplotlib

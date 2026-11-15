@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use REDZONE, please cite it as below, and cite the NASA FIRMS data products it uses (see README)."
+title: "REDZONE: global active-fire map with harmonized MODIS and VIIRS detections"
+type: software
+authors:
+  - name: "The REDZONE contributors"
+repository-code: "https://github.com/joekwn/REDZONE"
+license: MIT
+keywords:
+  - wildfire
+  - active fire
+  - NASA FIRMS
+  - MODIS
+  - VIIRS
+  - NASA Space Apps

@@ -73,8 +73,10 @@ def main():
 
     print("\n5. Past-data jobs in the database:")
     try:
-        import duckdb
-        con = duckdb.connect(str(DB_PATH), read_only=True)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import redzone_db
+        con = redzone_db.connect(read_only=True)
+        print("   database:", redzone_db.describe())
     except Exception as exc:
         print(f"   cannot open the database ({type(exc).__name__}) - stop the website server and run again")
         return

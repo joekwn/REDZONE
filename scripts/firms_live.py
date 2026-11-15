@@ -40,7 +40,8 @@ import notify                          # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = PROJECT_ROOT / "data" / "redzone.duckdb"
-RAW_API_DIR = PROJECT_ROOT / "data" / "raw" / "API"
+import redzone_db                                    # noqa: E402
+RAW_API_DIR = redzone_db.WORK_DIR / "raw" / "API"    # data/raw/API (or /tmp on Vercel)
 
 API = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
 WORLD = "-180,-90,180,90"                      # west,south,east,north
@@ -205,12 +206,8 @@ def main():
     key = os.environ.get("FIRMS_MAP_KEY", "").strip()
     if not key:
         sys.exit("STOP: environment variable FIRMS_MAP_KEY is not set.")
-    if not DB_PATH.exists():
-        sys.exit(f"STOP: database not found: {DB_PATH}")
-    try:
-        con = duckdb.connect(str(DB_PATH))
-    except duckdb.IOException:
-        sys.exit("STOP: the database is in use (is the website server running?). Stop it first.")
+    con = redzone_db.connect()
+    print("database:", redzone_db.describe())
 
     try:
         s = update(con, key, args.start, args.end)

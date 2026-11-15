@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of use · REDZONE</title>
+<link rel="icon" type="image/png" href="/static/img/favicon.png">
+<style>
+  body { margin: 0; background: #0f1115; color: #e6e8ec; font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { width: min(760px, 92vw); margin: 0 auto; padding: 36px 0 60px; }
+  a { color: #ff3b1f; }
+  h1 { font-size: 30px; margin: 18px 0 4px; } h2 { font-size: 19px; margin: 30px 0 8px; }
+  p, li { color: #c9ced8; } .muted { color: #8b93a3; font-size: 14px; }
+  .warn { background: rgba(250,204,21,.07); border: 1px solid rgba(250,204,21,.35); border-radius: 10px; padding: 14px 18px; }
+  .warn b { color: #facc15; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #e6e8ec; font-weight: 750; letter-spacing: .12em; }
+  .brand img { width: 34px; height: 34px; } .brand .r { color: #ff3b1f; }
+</style>
+</head>
+<body><div class="wrap">
+<a class="brand" href="/"><img src="/static/img/logo-mark.png" alt=""><span><span class="r">RED</span>ZONE</span></a>
+<h1>Terms of use</h1>
+<p class="muted">Last updated {{UPDATED}} · Plain-language terms for a student prototype. Not legal advice.</p>
+
+<div class="warn"><b>Not a warning or safety service.</b> REDZONE shows satellite fire detections and a weather-based risk level. Satellites pass a place only a few times a day, can miss fires hidden by clouds or smoke, and can report heat that is not a wildfire. A result such as "no fire activity detected" does not mean a place is safe. Always follow official guidance from local authorities and emergency services.</div>
+
+<h2>The service</h2>
+<ul>
+  <li>REDZONE is a prototype made for the NASA Space Apps Challenge. It is provided free, "as is", without any guarantee of accuracy, completeness or availability. It may change, pause or close at any time.</li>
+  <li>Its data-processing rules were developed and tested on NASA data from 1 November 2025 to 1 November 2026. Other days are processed with the same rules but were not checked by hand as thoroughly.</li>
+  <li>Do not use REDZONE for emergency, life-safety, insurance, legal or financial decisions.</li>
+</ul>
+
+<h2>Fair use</h2>
+<ul>
+  <li>Do not try to break, overload or get around the limits of the service (for example, automated look-ups or fake accounts).</li>
+  <li>Keep your password private. You are responsible for what is done with your account.</li>
+  <li>Accounts that misuse the service may be removed.</li>
+</ul>
+
+<h2>Data and credits</h2>
+<p>Fire data: NASA FIRMS (MODIS Collection 6.1 and VIIRS 375 m from NOAA-21). We acknowledge the use of data and imagery from NASA's Fire Information for Resource Management System (FIRMS). Weather: Open-Meteo. Maps and place search: © OpenStreetMap contributors, CARTO, Esri. Downloads from REDZONE keep these sources' own terms.</p>
+
+<h2>Contact</h2>
+<p><a href="mailto:{{CONTACT}}">{{CONTACT}}</a></p>
+<p class="muted"><a href="/">Home</a> · <a href="/app">Map</a> · <a href="/privacy">Privacy</a></p>
+</div></body>
+</html>

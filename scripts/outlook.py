@@ -27,7 +27,9 @@ import urllib.parse
 import urllib.request
 
 LEVELS = ["low", "moderate", "high", "very high"]
-USER_AGENT = "REDZONE-prototype/0.1 (NASA Space Apps project)"
+import os
+_contact = os.environ.get("REDZONE_CONTACT_EMAIL", "").strip()
+USER_AGENT = "REDZONE-prototype/1.0 (NASA Space Apps project" + (f"; {_contact})" if _contact else ")")
 
 CONF_OK_SQL = """(
     (sensor_family = 'MODIS' AND TRY_CAST(confidence AS INT) >= 30) OR

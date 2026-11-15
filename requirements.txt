@@ -1,9 +1,9 @@
+# Website + live updates (used by the server, Vercel and deploy/setup.sh)
 pandas
-pyarrow
 numpy
-duckdb
+# 1.4.1 - 1.5.5: the DuckDB versions MotherDuck accepts (needed for the Vercel option)
+duckdb>=1.4.1,<=1.5.5
 fastapi
 uvicorn[standard]
 pydantic
 argon2-cffi
-matplotlib

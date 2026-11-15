@@ -1,0 +1,24 @@
+[Unit]
+Description=REDZONE fire map (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=redzone
+Group=redzone
+WorkingDirectory=/opt/redzone
+EnvironmentFile=/etc/redzone/redzone.env
+# one worker: DuckDB allows one writing process
+ExecStart=/opt/redzone/.venv/bin/uvicorn webapp.server:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+# hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/redzone/data /opt/redzone/backups
+
+[Install]
+WantedBy=multi-user.target

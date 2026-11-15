@@ -91,6 +91,8 @@ def _load_secret():
     env = os.environ.get("REDZONE_SECRET", "").strip()
     if env:
         return env.encode()
+    if os.environ.get("VERCEL") or os.environ.get("REDZONE_SERVERLESS") == "1":
+        raise SystemExit("REDZONE_SECRET must be set on this host (it cannot keep a secret.key file).")
     path = Path(__file__).resolve().parents[1] / "data" / "secret.key"
     if not path.exists():
         path.write_text(secrets.token_hex(32))
@@ -118,7 +120,10 @@ def secure_cookies():
 
 def client_ip(request):
     if os.environ.get("REDZONE_TRUST_PROXY") == "1":     # only behind your own HTTPS proxy
-        fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        cf = request.headers.get("cf-connecting-ip", "").strip()      # Cloudflare tunnel: set by Cloudflare
+        if cf:
+            return cf
+        fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()   # Caddy replaces this header
         if fwd:
             return fwd
     return request.client.host if request.client else "unknown"

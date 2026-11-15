@@ -1,0 +1,6 @@
+[Unit]
+Description=REDZONE daily database backup
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/redzone/deploy/backup.sh

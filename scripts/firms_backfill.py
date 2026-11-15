@@ -239,10 +239,10 @@ def main():
     key = os.environ.get("FIRMS_MAP_KEY", "").strip()
     if not key:
         sys.exit("STOP: environment variable FIRMS_MAP_KEY is not set.")
-    try:
-        con = duckdb.connect(str(DB_PATH))
-    except duckdb.IOException:
-        sys.exit("STOP: the database is in use (is the website server running?). Stop it first.")
+    import redzone_db
+    con = redzone_db.connect()
+    print("database:", redzone_db.describe())
+    ensure_tables(con)
     try:
         s = run(con, key, args.start, args.end)
     except ValueError as exc:

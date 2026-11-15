@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · REDZONE</title>
+<link rel="icon" type="image/png" href="/static/img/favicon.png">
+<style>
+  body { margin: 0; background: #0f1115; color: #e6e8ec; font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { width: min(760px, 92vw); margin: 0 auto; padding: 36px 0 60px; }
+  a { color: #ff3b1f; }
+  h1 { font-size: 30px; margin: 18px 0 4px; } h2 { font-size: 19px; margin: 30px 0 8px; }
+  p, li { color: #c9ced8; } .muted { color: #8b93a3; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; margin-top: 8px; }
+  td, th { border: 1px solid #262b36; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #171a21; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #e6e8ec; font-weight: 750; letter-spacing: .12em; }
+  .brand img { width: 34px; height: 34px; } .brand .r { color: #ff3b1f; }
+</style>
+</head>
+<body><div class="wrap">
+<a class="brand" href="/"><img src="/static/img/logo-mark.png" alt=""><span><span class="r">RED</span>ZONE</span></a>
+<h1>Privacy</h1>
+<p class="muted">Last updated {{UPDATED}} · REDZONE is a student prototype built for the NASA Space Apps Challenge. This page explains what it stores and shares. It is not legal advice.</p>
+
+<h2>Using the map as a guest</h2>
+<p>You can use the map, search, statistics, outlook and look-ups without an account. REDZONE does not use advertising or analytics trackers.</p>
+<ul>
+  <li>Your browser stores a few settings on your own device (selected tab, side panel width, map style). They never leave your device.</li>
+  <li>The server sees your IP address with each request, as every website does. It is kept in memory only, to apply limits against abuse (for example, the number of FIRMS look-ups per hour), and it is forgotten when the server restarts.</li>
+</ul>
+
+<h2>If you create an account</h2>
+<table>
+  <tr><th>What</th><th>Why</th><th>How it is protected</th></tr>
+  <tr><td>Name and email address</td><td>To sign in and show your name</td><td>Never shown to other users. Email addresses are not verified and nothing is emailed to them while email is switched off.</td></tr>
+  <tr><td>Password</td><td>To sign in</td><td>Stored only as an Argon2id hash. Nobody, including the operator, can read your password.</td></tr>
+  <tr><td>Sign-in session</td><td>To keep you signed in for 14 days</td><td>A secure, HttpOnly cookie. Only a SHA-256 fingerprint of it is stored.</td></tr>
+  <tr><td>Your events and priority sites (names, places, dates, details)</td><td>To run fire checks and alerts for you</td><td>Visible only to you.</td></tr>
+</table>
+<p>You can delete your account at any time in the <b>Account</b> tab. This removes your account, sessions, events, priority sites and their alerts straight away. Copies may remain in server backups for up to 14 days.</p>
+
+<h2>Services REDZONE contacts</h2>
+<p>Some features send limited information to outside services:</p>
+<ul>
+  <li><b>Your location (Near me):</b> if you allow it, your browser gives your position to the page. It is used to search nearby fires and the weather forecast and is not stored unless you save it as a priority site. If you do not allow it, the server asks <i>ipapi.co</i> or <i>ipwho.is</i> for an approximate location of your IP address.</li>
+  <li><b>Place search:</b> what you type is sent by the server to <i>Photon</i> and <i>Nominatim</i> (OpenStreetMap).</li>
+  <li><b>Fire-risk outlook and event checks:</b> coordinates (rounded to about 10 m) are sent to <i>Open-Meteo</i> for the weather forecast.</li>
+  <li><b>Fire data:</b> map areas and dates are sent to <i>NASA FIRMS</i> for live updates and look-ups. No personal data is included.</li>
+  <li><b>Map tiles and libraries:</b> your browser loads map images from <i>CARTO</i>, <i>Esri</i> or <i>OpenStreetMap</i>, and code libraries from <i>unpkg</i> and <i>jsDelivr</i>. These services receive your IP address under their own privacy policies.</li>
+</ul>
+
+<h2>Contact</h2>
+<p>Questions or deletion requests: <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
+<p class="muted"><a href="/">Home</a> · <a href="/app">Map</a> · <a href="/terms">Terms of use</a></p>
+</div></body>
+</html>

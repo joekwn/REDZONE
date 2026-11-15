@@ -420,6 +420,7 @@
       <li>Area selection by drawing a shape, with CSV export.</li>
       <li>A trained fire-risk model using several years of history, vegetation and drought data (the current outlook uses fire weather + one year of history).</li>
     </ul>
+    <p class="note"><a href="/terms" target="_blank" style="color:var(--accent)">Terms of use</a> · <a href="/privacy" target="_blank" style="color:var(--accent)">Privacy</a></p>
     <button onclick="document.getElementById('about').style.display='none'">Close</button>
   </div>
 </div>
@@ -931,7 +932,8 @@ function openAuth(view) {
       <input type="password" id="aPass" placeholder="Password (at least 10 characters)" autocomplete="new-password">
       <input type="password" id="aPass2" placeholder="Repeat password" autocomplete="new-password">
       <button class="primary" style="margin-top:6px" onclick="doRegister()">Create account</button><div id="aMsg"></div>
-      <div class="note">Your password is stored only as an Argon2id hash. ${EMAIL ? "" : "Keep it safe: password reset by email is not available yet."}</div>
+      <div class="note">Your password is stored only as an Argon2id hash. ${EMAIL ? "" : "Keep it safe: password reset by email is not available yet."}
+        By creating an account you accept the <a href="/terms" target="_blank">terms of use</a> and <a href="/privacy" target="_blank">privacy notice</a>.</div>
       <div class="links"><a onclick="openAuth('signin')">I already have an account</a></div>`,
     forgot: `<h3>Reset your password</h3>
       <div class="note">We'll email you a 6-digit code.</div>

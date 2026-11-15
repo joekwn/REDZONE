@@ -1,0 +1,14 @@
+# Caddy gets and renews the HTTPS certificate for this address automatically.
+{{HOST}} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8000
+	header {
+		-Server
+	}
+	log {
+		output file /var/log/caddy/redzone.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

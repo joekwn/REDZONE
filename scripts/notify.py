@@ -42,7 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import outlook  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-OUTBOX = PROJECT_ROOT / "data" / "outbox"
+import redzone_db                                    # noqa: E402
+OUTBOX = redzone_db.WORK_DIR / "outbox"              # data/outbox (or /tmp on Vercel)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 CHECK_HOURS_BEFORE = 12
 RECENT_HOURS = 48

@@ -29,6 +29,7 @@ Then open http://127.0.0.1:8000 in your browser.
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
+import hmac
 import math
 import os
 import sys
@@ -42,7 +43,7 @@ from functools import lru_cache
 
 import duckdb
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -61,24 +62,27 @@ import lookup                                       # noqa: E402
 from redzone_rules import CONF_CLASS_SQL            # noqa: E402
 
 MAP_KEY = os.environ.get("FIRMS_MAP_KEY", "").strip()
+CONTACT = os.environ.get("REDZONE_CONTACT_EMAIL", "").strip()     # shown on /privacy and /terms
 UPDATE_HOURS = float(os.environ.get("REDZONE_UPDATE_HOURS", "3"))
 
 MAX_POINTS = 20_000      # never send more individual points than this
 POINT_ZOOM = 8           # from this zoom level on, show individual detections
 
-if not DB_PATH.exists():
-    raise SystemExit(f"Database not found: {DB_PATH}")
-try:
-    # read-write: the server itself adds live data, sites and alerts
-    DB = duckdb.connect(str(DB_PATH))
-except duckdb.IOException:
-    raise SystemExit("The database is in use by another program (e.g. firms_live.py). Close it first.")
+import redzone_db                                   # noqa: E402
+SERVERLESS = redzone_db.SERVERLESS                  # True on Vercel: no background loops, no local files
+CRON_SECRET = os.environ.get("CRON_SECRET", "").strip()
+
+# read-write: the server itself adds live data, sites and alerts
+DB = redzone_db.connect()
+print("[server] database:", redzone_db.describe(), "| serverless" if SERVERLESS else "")
 firms_live.ensure_tables(DB)
 notify.ensure_tables(DB)
 auth.init(DB)
 firms_backfill.ensure_tables(DB)
-DB.execute("""UPDATE backfill_jobs SET status = 'interrupted', message = 'server stopped during the job',
-              finished_at = current_timestamp WHERE status = 'running'""")
+if not SERVERLESS:
+    # on a normal server a job cannot outlive the server; on Vercel jobs run from your computer
+    DB.execute("""UPDATE backfill_jobs SET status = 'interrupted', message = 'server stopped during the job',
+                  finished_at = current_timestamp WHERE status = 'running'""")
 EVENT_CHECK_MINUTES = 10
 
 CONF_CLASS = CONF_CLASS_SQL         # shared confidence label (redzone_rules.py)
@@ -131,6 +135,16 @@ def event_scheduler():
 
 @asynccontextmanager
 async def lifespan(app):
+    if SERVERLESS:
+        # Vercel: nothing may keep running between requests. Updates and event checks
+        # come from scheduled calls to /api/cron/update and /api/cron/events instead.
+        print("[server] serverless mode: updates and event checks run from /api/cron/*")
+        yield
+        try:
+            DB.close()
+        except Exception:
+            pass
+        return
     THREADS.append(threading.Thread(target=event_scheduler, daemon=True, name="events"))
     THREADS[-1].start()
     print(f"[email] {'SMTP ' + os.environ['SMTP_HOST'] if os.environ.get('SMTP_HOST') else 'test mode: emails saved to data/outbox/'}")
@@ -237,6 +251,37 @@ def index():
     return FileResponse(STATIC / "index.html")            # the map
 
 
+def legal_page(name):
+    html = (STATIC / f"{name}.html").read_text(encoding="utf-8")
+    updated = datetime.fromtimestamp((STATIC / f"{name}.html").stat().st_mtime, timezone.utc).strftime("%d %B %Y")
+    return HTMLResponse(html.replace("{{CONTACT}}", CONTACT or "(contact address not set)").replace("{{UPDATED}}", updated))
+
+
+@app.get("/privacy")
+def privacy():
+    return legal_page("privacy")
+
+
+@app.get("/terms")
+def terms():
+    return legal_page("terms")
+
+
+@app.get("/healthz")
+def healthz():
+    """For uptime monitors: is the server up and can it read the database?"""
+    try:
+        cursor().execute("SELECT 1").fetchall()
+        return {"ok": True}
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=503)
+
+
+@app.get("/robots.txt")
+def robots():
+    return Response("User-agent: *\nDisallow: /api/\nAllow: /\n", media_type="text/plain")
+
+
 @app.get("/favicon.ico")
 def favicon():
     return FileResponse(STATIC / "img" / "favicon.png", media_type="image/png")
@@ -246,6 +291,8 @@ def favicon():
 def meta():
     lo, hi, total = cursor().execute(
         "SELECT MIN(acq_date), MAX(acq_date), COUNT(*) FROM fires").fetchone()
+    if not total:                    # empty database (fresh install): use today so the date pickers work
+        lo = hi = datetime.now(timezone.utc).date().isoformat()
     return {"min_date": str(lo), "max_date": str(hi), "total": total}
 
 
@@ -327,12 +374,17 @@ def near(lat: float, lon: float, radius_km: float, start: str, end: str,
 
 @app.get("/api/status")
 def status():
-    newest, total, max_date = cursor().execute(
+    cur = cursor()
+    newest, total, max_date = cur.execute(
         "SELECT strftime(MAX(acq_datetime), '%Y-%m-%d %H:%M'), COUNT(*), MAX(acq_date) FROM fires").fetchone()
+    state = dict(STATE)
+    if SERVERLESS and not state["running"]:
+        # each request may land on a different copy of the app: read the last run from the database
+        last = cur.execute("SELECT strftime(MAX(run_at), '%Y-%m-%d %H:%M UTC') FROM update_log").fetchone()[0]
+        state["last_run"] = last
     return {"key_configured": bool(MAP_KEY), "update_hours": UPDATE_HOURS,
-            "smtp_configured": bool(os.environ.get("SMTP_HOST")),
-            "newest_detection": newest, "total": total, "max_date": str(max_date),
-            **{k: v for k, v in STATE.items()}}
+            "smtp_configured": bool(os.environ.get("SMTP_HOST")), "serverless": SERVERLESS,
+            "newest_detection": newest, "total": total, "max_date": str(max_date), **state}
 
 
 @app.post("/api/update", status_code=202)
@@ -341,8 +393,41 @@ def start_update(admin=Depends(auth.require_admin)):
         raise HTTPException(400, "FIRMS_MAP_KEY is not set on the server")
     if STATE["running"]:
         return {"started": False, "message": "an update is already running"}
+    if SERVERLESS:                       # no background threads: run it inside this request
+        run_update("manual")
+        return {"started": True, "finished": True, "result": STATE["last_result"], "error": STATE["last_error"]}
     threading.Thread(target=run_update, args=("manual",), daemon=True).start()
     return {"started": True}
+
+
+# ---------- scheduled calls (Vercel cron / GitHub Actions) ----------
+def require_cron(request: Request):
+    """Only the scheduler knows CRON_SECRET (sent as 'Authorization: Bearer <secret>')."""
+    if not CRON_SECRET:
+        raise HTTPException(503, "CRON_SECRET is not set on the server")
+    got = request.headers.get("authorization", "")
+    if not hmac.compare_digest(got.encode(), f"Bearer {CRON_SECRET}".encode()):
+        raise HTTPException(401, "not allowed")
+
+
+@app.get("/api/cron/update")
+def cron_update(request: Request):
+    require_cron(request)
+    if not MAP_KEY:
+        raise HTTPException(400, "FIRMS_MAP_KEY is not set on the server")
+    ran = run_update("scheduled")
+    return {"ran": ran, "result": STATE["last_result"], "error": STATE["last_error"]}
+
+
+@app.get("/api/cron/events")
+def cron_events(request: Request):
+    require_cron(request)
+    cur = DB.cursor()
+    try:
+        notify.run_due_events(cur, log=print)
+    finally:
+        cur.close()
+    return {"ok": True}
 
 
 # ---------- past data (backfill) ----------
@@ -398,6 +483,10 @@ def backfill_availability(admin=Depends(auth.require_admin)):
 def start_backfill(body: BackfillRequest, admin=Depends(auth.require_admin)):
     if not MAP_KEY:
         raise HTTPException(400, "FIRMS_MAP_KEY is not set on the server")
+    if SERVERLESS:
+        raise HTTPException(400, "On this host, past data is collected from your computer: "
+                                 "py scripts\\firms_backfill.py --start YYYY-MM-DD --end YYYY-MM-DD "
+                                 "(with REDZONE_DB and MOTHERDUCK_TOKEN set). Look-ups still work here.")
     if backfill_running():
         raise HTTPException(409, "A past-data job is already running")
     try:
@@ -483,7 +572,8 @@ def alerts(limit: int = 50, user=Depends(auth.require_user)):
 
 
 # ---------- place search ----------
-USER_AGENT = "REDZONE-prototype/0.1 (NASA Space Apps project)"   # required by OSM services
+# OpenStreetMap services ask every app to identify itself, with a contact address if possible
+USER_AGENT = "REDZONE-prototype/1.0 (NASA Space Apps project" + (f"; {CONTACT})" if CONTACT else ")")
 
 
 def get_json(url):
